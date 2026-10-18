@@ -1,0 +1,10 @@
+{
+  "name": "albert-no485",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "build:pages": "python3 site/build_pages.py",
+    "test": "node --test --test-concurrency=1 tests/*.test.mjs"
+  }
+}
