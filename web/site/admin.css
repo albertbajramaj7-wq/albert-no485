@@ -168,3 +168,5 @@
 #supplier-card{margin-top:22px}
 #stock-save[disabled]{opacity:.45}
 @media (max-width:760px){.stock-row{grid-template-columns:minmax(0,1fr) auto}.stock-count{grid-column:1/-1;justify-content:space-between}}
+/* Som app på hemskärmen: håll innehållet fritt från iPadens/iPhonens kanter */
+@media (display-mode: standalone){.admin-topbar{padding-top:env(safe-area-inset-top)}.admin-drawer,.drawer-backdrop{top:calc(72px + env(safe-area-inset-top))}}

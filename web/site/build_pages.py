@@ -11,6 +11,7 @@ for name in ['admin.css','admin.js','booking.js']:
  (DIST/'assets'/name).write_text((SRC/name).read_text())
 admin_folder=DIST/'admin';admin_folder.mkdir(exist_ok=True)
 (admin_folder/'index.html').write_text((SRC/'admin.html').read_text())
+(admin_folder/'manifest.webmanifest').write_text((SRC/'admin.webmanifest').read_text())
 
 def links(s):
  for a,b in [('https://www.albertno485.com/meny','/meny/'),('https://www.albertno485.com/historien','/historien/'),('https://www.albertno485.com/avpn','/avpn/'),('https://www.albertno485.com/boka-pizza','/boka-pizza/')]:s=s.replace(a,b)
