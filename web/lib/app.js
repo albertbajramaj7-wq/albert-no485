@@ -2,6 +2,7 @@
 // Ren JavaScript utan externa paket, så den körs som en Vercel-funktion och i testerna.
 import { AppError } from './supabase.js';
 import { emailConfiguration, sendBookingEmail } from './email.js';
+import { BudgetError, computeBudget, normalizeSettings, normalizeWeek } from './budget.js';
 
 const AT = 'alb_at', RT = 'alb_rt';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -163,6 +164,18 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
       }
       if (path === '/api/admin/stock') return reply(await rpc('api_stock', method === 'GET' ? { actor, action: 'list' } : { ...input, actor }));
       if (path === '/api/admin/purchase') return reply(await rpc('api_purchase', method === 'GET' ? { actor, action: 'list' } : { ...input, actor }));
+      if (path === '/api/admin/budget') {
+        // Veckobudget: databasen sparar, lib/budget.js räknar (samma som Google-arket).
+        const clean = fn => { try { return fn(); } catch (error) { if (error instanceof BudgetError) throw new AppError(400, error.message); throw error; } };
+        let body = { actor, action: 'get' };
+        if (method === 'POST' && input.action === 'save_settings') body = { actor, action: 'save_settings', settings: clean(() => normalizeSettings(input.settings)) };
+        else if (method === 'POST' && input.action === 'save_week') {
+          const current = await rpc('api_budget', { actor, action: 'get' });
+          body = { actor, action: 'save_week', week: clean(() => normalizeWeek(input.week, normalizeSettings(current.settings))) };
+        } else if (method === 'POST') throw new AppError(400, 'Okänd åtgärd.');
+        const result = await rpc('api_budget', body);
+        return reply({ ...clean(() => computeBudget(result.settings, result.weeks, result.received)), settingsUpdatedAt: result.settingsUpdatedAt });
+      }
       if (path === '/api/admin/menu') return reply(await rpc('api_admin_menu', method === 'GET' ? { actor } : { actor, action: 'save', item: input.item }));
       if (path === '/api/admin/config') return reply(await rpc('api_admin_settings', method === 'GET' ? { actor, action: 'get' } : { ...input, actor }));
       if (path === '/api/admin/staff' && method === 'GET') return reply(await rpc('api_admin_staff', { actor, action: 'list' }));

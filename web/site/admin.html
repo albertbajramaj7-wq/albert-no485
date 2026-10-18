@@ -28,6 +28,7 @@
       <button type="button" data-view="purchase">Inköp</button>
       <button type="button" data-view="history">Historik</button>
       <hr data-role="admin" hidden>
+      <button type="button" data-view="budget" data-role="admin" hidden>Veckobudget</button>
       <button type="button" data-view="stats" data-role="admin" hidden>Statistik</button>
       <button type="button" data-view="menu" data-role="admin" hidden>Meny</button>
       <button type="button" data-view="staff" data-role="admin" hidden>Personal</button>
@@ -156,6 +157,33 @@
         <div id="task-list" class="task-columns"></div>
       </section>
       <section data-panel="history" hidden><section class="admin-card"><div class="section-heading"><h2>Dagens händelser</h2><span class="muted">Senaste 100</span></div><div id="history-list"></div></section></section>
+
+      <section data-panel="budget" hidden>
+        <div class="section-heading budget-heading"><div><h2 id="bud-title">Veckobudget</h2><p class="muted" id="bud-sub">Samma uträkning som ditt budgetark.</p></div>
+          <div class="budget-nav"><button type="button" id="bud-prev" class="secondary-button">Förra veckan</button><select id="bud-week" aria-label="Välj vecka"></select><button type="button" id="bud-next" class="secondary-button">Nästa vecka</button></div></div>
+        <div id="bud-warnings" class="closed-banner budget-warnings" hidden></div>
+        <div class="day-summary key-figures" id="bud-figures"></div>
+        <section class="admin-card"><h2>Veckans försäljning</h2>
+          <form id="bud-week-form">
+            <div class="config-grid">
+              <div><label for="bud-revenue" id="bud-revenue-label">Omsättning ex moms (kr)</label><input id="bud-revenue" inputmode="decimal" autocomplete="off"></div>
+              <div><label for="bud-vat">Moms enligt kassarapport (kr)</label><input id="bud-vat" inputmode="decimal" autocomplete="off" placeholder="Räknas ut om tomt"></div>
+              <div><label for="bud-card">Kortbelopp inkl moms (kr)</label><input id="bud-card" inputmode="decimal" autocomplete="off" placeholder="Uppskattas om tomt"></div>
+              <div><label for="bud-cardcount">Antal kortköp</label><input id="bud-cardcount" inputmode="numeric" autocomplete="off" placeholder="Uppskattas om tomt"></div>
+              <div><label for="bud-kind">Typ</label><select id="bud-kind"><option value="actual">Faktisk vecka</option><option value="example">Exempel (förs inte vidare)</option></select></div>
+              <div><label for="bud-note">Anteckning</label><input id="bud-note" maxlength="300" autocomplete="off"></div>
+            </div>
+            <p class="field-help" id="bud-sources">Fortnox och Caspeco är inte kopplade ännu. Tills dess fyller du i siffrorna här.</p>
+          </form>
+        </section>
+        <section class="admin-card"><div class="section-heading"><h2>Avsättningar och utfall</h2><span class="muted">Fyll i faktiskt använt belopp inkl moms</span></div>
+          <div class="table-scroll"><table class="data-table budget-table" id="bud-table"></table></div>
+          <div class="budget-actions"><button type="button" id="bud-save" class="admin-primary">Spara veckan</button></div>
+        </section>
+        <section class="admin-card"><div class="section-heading"><h2>Alla veckor</h2><button type="button" id="bud-export" class="text-button">Exportera CSV</button></div>
+          <div class="table-scroll"><table class="data-table" id="bud-year"></table></div></section>
+        <details class="admin-card budget-settings" id="bud-settings"><summary>Budgetinställningar</summary><form id="bud-settings-form"><div id="bud-settings-body"></div><div class="budget-actions"><button type="submit" class="admin-primary">Spara inställningar</button></div></form></details>
+      </section>
 
       <section data-panel="stats" hidden>
         <div class="section-heading"><div><h2>Försäljning och svinn</h2><p class="muted" id="stats-note">Försäljningen är en uppskattning tills kassasystemet kopplas in.</p></div>

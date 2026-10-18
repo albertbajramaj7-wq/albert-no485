@@ -53,7 +53,7 @@
       const result = await request('day?date=' + encodeURIComponent($('work-date').value));
       if (current !== serial) return;
       data = result; needsRefresh = false; dirty = false;
-      $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(view);
+      $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(view);
       $('logout').hidden = false; $('account-button').hidden = false; $('menu-toggle').hidden = false;
       render();
       if (!silent) note('');
@@ -97,17 +97,18 @@
     if (open) document.querySelector('#admin-tabs [aria-current="page"]')?.focus({ preventScroll: true });
   }
   function switchView(value) {
-    if (!['day', 'phone', 'stock', 'purchase', 'tasks', 'history', 'stats', 'menu', 'staff', 'config'].includes(value) || (['stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
+    if (!['day', 'phone', 'stock', 'purchase', 'tasks', 'history', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) || (['budget', 'stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
     view = value;
     document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== value);
     document.querySelectorAll('[data-view]').forEach(b => { if (b.dataset.view === value) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', stock: 'Lager', purchase: 'Inköp', tasks: 'Arbetsuppgifter', history: 'Historik', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
-    const ownPage = ['stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(value);
+    $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', stock: 'Lager', purchase: 'Inköp', tasks: 'Arbetsuppgifter', history: 'Historik', budget: 'Veckobudget', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
+    const ownPage = ['budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(value);
     $('day-controls').hidden = ownPage; $('day-label').hidden = ownPage;
     note('');
     if (value === 'phone') loadPhone();
     if (value === 'stock') loadStock();
     if (value === 'purchase') loadPurchase();
+    if (value === 'budget') loadBudget();
     if (value === 'stats') loadStats();
     if (value === 'menu') loadMenu();
     if (value === 'staff') loadStaff();
@@ -277,7 +278,7 @@
     $('prepared').value = data.day.prepared === null ? '' : data.day.prepared; $('paused').checked = !!data.day.paused; $('after-closing').checked = !!data.day.allow_after_closing;
     $('limits-help').textContent = 'Gäller valt datum. ' + data.limits.slot + ' pizzor per kvart, ' + data.limits.hour + ' per timme och ' + data.limits.seats + ' sittplatser.';
     renderBookings(); renderWaste(); renderTasks(); renderHistory(); lock();
-    if (!isAdmin() && ['stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
+    if (!isAdmin() && ['budget', 'stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
     if (view === 'phone') loadPhone();
   }
 
@@ -606,6 +607,175 @@
     if (!config.closedDates.length) list.append(el('p', 'Inga extra stängda datum.', 'muted'));
     config.closedDates.forEach(c => { const row = el('div', undefined, 'waste-row'), text = el('div'); text.append(el('strong', readable(c.date)), el('small', [c.reason, 'stängt av ' + c.created_by].filter(Boolean).join(' · '))); row.append(text, button('Öppna igen', 'text-button', async () => { const r = await adminCall('config', { action: 'reopen_date', date: c.date }, 'Datumet är öppet för bokning igen.'); if (r) { config = r; renderConfig(); } })); list.append(row); });
   }
+
+
+  // ---------- Veckobudget ----------
+  let budget, budWeek;
+  const krd = n => n === null || n === undefined ? '–' : (Math.round(n * 100) / 100).toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' kr';
+  const krw = n => n === null || n === undefined ? '–' : Math.round(n).toLocaleString('sv-SE') + ' kr';
+  const parseNum = v => { const t = String(v ?? '').replace(/\s/g, '').replace(',', '.'); if (t === '') return null; const n = Number(t); return Number.isFinite(n) ? n : NaN; };
+  const fmtInput = n => n === null || n === undefined ? '' : String(n).replace('.', ',');
+  const mondayOf = date => { const d = new Date(date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7)); return d.toISOString().slice(0, 10); };
+  const addDays = (date, n) => { const d = new Date(date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
+  const weekNo = date => { const d = new Date(date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 3 - ((d.getUTCDay() + 6) % 7)); const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 4)); return 1 + Math.round(((d - y) / 864e5 - 3 + ((y.getUTCDay() + 6) % 7)) / 7); };
+  const weekLabel = date => 'Vecka ' + weekNo(date) + ' · ' + new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(date + 'T12:00:00Z')) + '–' + new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(addDays(date, 6) + 'T12:00:00Z'));
+  async function loadBudget() { const r = await adminCall('budget'); if (r) { budget = r; budWeek = budWeek || mondayOf(today()); renderBudget(); } }
+  const budgetPreview = () => budget.weeks.find(w => w.weekStart === budWeek) || null;
+  function figure(label, value, sub, strongClass) { const d = el('div'), s = el('strong', value); if (strongClass) s.className = strongClass; d.append(el('span', label), s, el('small', sub || '')); return d; }
+  function renderBudget() {
+    if (!budget) return;
+    const s = budget.settings, w = budgetPreview();
+    // Veckoväljaren: sparade veckor + vald vecka + innevarande.
+    const set = new Set(budget.weeks.map(x => x.weekStart)); set.add(budWeek); set.add(mondayOf(today()));
+    const sel = $('bud-week'); sel.replaceChildren();
+    [...set].sort().forEach(d => { const o = el('option', weekLabel(d) + (budget.weeks.some(x => x.weekStart === d) ? '' : ' (ny)')); o.value = d; o.selected = d === budWeek; sel.append(o); });
+    $('bud-title').textContent = weekLabel(budWeek);
+    $('bud-sub').textContent = w?.computed ? w.status + (w.updatedBy ? ' · sparad av ' + w.updatedBy : '') : 'Fyll i veckans omsättning för att räkna fram budgeten.';
+    const warn = [...budget.warnings]; if (Math.abs(budget.pctSum - 1) > 0.0001 && budget.pctSum > 0.9) warn.push('Procentfördelningen är ' + Math.round(budget.pctSum * 1000) / 10 + ' % av omsättningen.');
+    $('bud-warnings').hidden = !warn.length; $('bud-warnings').textContent = warn.join(' ');
+    // Huvudsiffror
+    const figs = $('bud-figures'); figs.replaceChildren();
+    figs.append(
+      figure('Omsättning ex moms', w?.computed ? krw(w.revenueEx) : '–', w?.computed ? krw(w.perOpenDay) + ' per öppetdag' : 'Ej ifylld'),
+      figure('Försäljning inkl moms', w?.computed ? krw(w.salesInkl) : '–', w?.computed ? 'Varav moms ' + krw(w.salesVat) : ''),
+      figure('Kvar efter avsättningar', w?.computed ? krw(w.left) : '–', 'Budgetmarginal för veckan', w?.computed && w.left < 0 ? 'negative' : ''),
+      figure('Veckans plus/minus', w?.computed ? krw(w.plusMinus) : '–', 'Med faktiskt utfall där det finns', w?.computed && w.plusMinus < 0 ? 'negative' : ''),
+      figure('Saldo efter veckan', w ? krw(w.balanceOut) : krw(lastBalance()), 'Ingående ' + (w ? krw(w.balanceIn) : krw(lastBalance()))),
+      figure('Fritt saldo', w ? krw(w.free) : '–', 'Efter pengar kvar i kostnadspotter'),
+      figure('Varuinköp av omsättning', w?.goodsPct === null || w?.goodsPct === undefined ? '–' : w.goodsPct.toLocaleString('sv-SE') + ' %', 'Budget ' + Math.round(s.pct.goods * 1000) / 10 + ' %'),
+      figure('Momsreserv', w?.computed ? krw(w.vatReserve) : '–', 'Hela försäljningsmomsen'));
+    // Formulär
+    $('bud-revenue-label').textContent = s.reportBasis === 'inkl' ? 'Omsättning inkl moms (kr)' : 'Omsättning ex moms (kr)';
+    $('bud-revenue').value = fmtInput(w?.input.revenue); $('bud-vat').value = fmtInput(w?.input.salesVat);
+    $('bud-card').value = fmtInput(w?.input.cardAmount); $('bud-cardcount').value = fmtInput(w?.input.cardCount);
+    $('bud-kind').value = w?.kind || 'actual'; $('bud-note').value = w?.note || '';
+    $('bud-sources').textContent = 'Fortnox och Caspeco är inte kopplade ännu. Tills dess fyller du i siffrorna här.' + (w?.received ? ' Mottagna leveranser i admin den här veckan: ' + krd(w.received) + ' ex moms.' : '');
+    // Tabell
+    const table = $('bud-table'); table.replaceChildren();
+    const head = el('tr'); ['Post', 'Beräknas på', 'Sätt undan', 'Från förra veckan', 'Att använda', 'Faktiskt använt', 'Till nästa vecka', 'Status'].forEach(h => head.append(el('th', h)));
+    table.append(el('thead')); table.tHead.append(head);
+    const body = el('tbody');
+    const posts = w?.computed ? w.posts : [...['goods', 'fuel', 'staff', 'other'].map((k, i) => ({ key: k, name: ['Varuinköp', 'Drivmedel', 'Personal, total kostnad', 'Övrig löpande drift'][i] })), ...budget.fixed.map(f => ({ key: f.key, name: f.name })), { key: 'card', name: 'Kortavgift, uppskattad' }];
+    posts.forEach(p => {
+      const tr = el('tr'); if (p.missing) tr.className = 'budget-missing';
+      const input = el('input'); input.inputMode = 'decimal'; input.className = 'budget-actual'; input.dataset.key = p.key; input.autocomplete = 'off';
+      input.value = fmtInput(w?.actuals?.[p.key]); input.setAttribute('aria-label', 'Faktiskt använt för ' + p.name);
+      if (p.key === 'goods' && w?.received) input.placeholder = 'Leveranser ' + Math.round(w.received * (1 + s.purchaseVat.goods));
+      const actualCell = el('td'); actualCell.append(input);
+      const status = el('td', p.status || ''); if (p.status === 'Över budget') status.className = 'negative'; else if (p.status === 'Inom budget') status.className = 'positive';
+      tr.append(el('th', p.name), el('td', p.basis || ''), el('td', p.budget === undefined ? '–' : krd(p.budget)), el('td', p.in === undefined ? '–' : krd(p.in)), el('td', p.available === undefined ? '–' : krd(p.available)), actualCell, el('td', p.out === undefined ? '–' : krd(p.out)), status);
+      body.append(tr);
+    });
+    if (w?.computed) {
+      const extra = (label, value) => { const tr = el('tr', undefined, 'budget-sum'); tr.append(el('th', label), el('td', ''), el('td', krd(value)), el('td'), el('td'), el('td'), el('td'), el('td')); body.append(tr); };
+      extra('Buffert', w.buffer); extra('Momsreserv', w.vatReserve); extra('Summa avsättningar', w.reserve);
+    }
+    table.append(body);
+    renderBudgetYear(); renderBudgetSettings();
+  }
+  const lastBalance = () => { const before = budget.weeks.filter(x => x.weekStart < budWeek); return before.length ? before[before.length - 1].balanceOut : budget.settings.startBalance; };
+  function renderBudgetYear() {
+    const t = $('bud-year'); t.replaceChildren();
+    const head = el('tr'); ['Vecka', 'Typ', 'Omsättning ex moms', 'Försäljning inkl moms', 'Kvar efter avsättningar', 'Plus/minus', 'Saldo', 'Fritt saldo', 'Status'].forEach(h => head.append(el('th', h)));
+    t.append(el('thead')); t.tHead.append(head);
+    const body = el('tbody');
+    if (!budget.weeks.length) { const tr = el('tr'), td = el('td', 'Inga veckor sparade ännu.'); td.colSpan = 9; tr.append(td); body.append(tr); }
+    budget.weeks.forEach(w => {
+      const tr = el('tr'); tr.className = 'clickable-row' + (w.weekStart === budWeek ? ' selected' : '');
+      tr.append(el('th', weekLabel(w.weekStart)), el('td', w.kind === 'example' ? 'Exempel' : 'Faktisk'), el('td', w.computed ? krd(w.revenueEx) : '–'), el('td', w.computed ? krd(w.salesInkl) : '–'), el('td', w.computed ? krd(w.left) : '–'), el('td', w.computed ? krd(w.plusMinus) : '–'), el('td', krd(w.balanceOut)), el('td', krd(w.free)), el('td', w.status));
+      tr.addEventListener('click', () => { budWeek = w.weekStart; renderBudget(); window.scrollTo(0, 0); });
+      body.append(tr);
+    });
+    t.append(body);
+  }
+  // Inställningar: genereras från budget.settings.
+  function settingsField(parent, label, value, path, { percent = false, help } = {}) {
+    const d = el('div'), id = 'bs-' + path.replace(/[^a-z0-9]/gi, '-'), l = el('label', label), i = el('input');
+    l.htmlFor = id; i.id = id; i.inputMode = 'decimal'; i.autocomplete = 'off'; i.dataset.path = path; i.dataset.percent = percent ? '1' : '';
+    i.value = value === null || value === undefined ? '' : fmtInput(percent ? Math.round(value * 100000) / 1000 : value);
+    d.append(l, i); if (help) d.append(el('p', help, 'field-help')); parent.append(d); return i;
+  }
+  function renderBudgetSettings() {
+    const s = budget.settings, root = $('bud-settings-body'); root.replaceChildren();
+    const group = (title, help) => { const sec = el('div', undefined, 'budget-group'); sec.append(el('h3', title)); if (help) sec.append(el('p', help, 'muted')); const g = el('div', undefined, 'config-grid'); sec.append(g); root.append(sec); return g; };
+    let g = group('Försäljning och kalender');
+    const basis = el('div'), bl = el('label', 'Kassarapportens belopp'), bs = el('select'); bl.htmlFor = 'bs-reportBasis'; bs.id = 'bs-reportBasis';
+    [['ex', 'Exkl moms'], ['inkl', 'Inkl moms']].forEach(([v, t]) => { const o = el('option', t); o.value = v; o.selected = s.reportBasis === v; bs.append(o); }); basis.append(bl, bs); g.append(basis);
+    settingsField(g, 'Öppetdagar per vecka', s.openDays, 'openDays');
+    settingsField(g, 'Andel betalning med kort (%)', s.cardShare, 'cardShare', { percent: true });
+    settingsField(g, 'Snitt per kortköp inkl moms (kr)', s.avgCard, 'avgCard');
+    settingsField(g, 'Startsaldo (kr)', s.startBalance, 'startBalance', { help: 'Pengar kvar före första veckan.' });
+    g = group('Fördelning av omsättning ex moms (%)', 'Summa just nu: ' + Math.round(budget.pctSum * 1000) / 10 + ' %. Fasta kostnader, kortavgift och moms avsätts dessutom.');
+    [['goods', 'Varuinköp'], ['fuel', 'Drivmedel'], ['staff', 'Personal, total kostnad'], ['buffer', 'Buffert'], ['other', 'Övrig löpande drift']].forEach(([k, t]) => settingsField(g, t, s.pct[k], 'pct.' + k, { percent: true }));
+    g = group('Moms på löpande inköp (%)');
+    [['goods', 'Varuinköp'], ['fuel', 'Drivmedel'], ['other', 'Övrig löpande drift']].forEach(([k, t]) => settingsField(g, t, s.purchaseVat[k], 'purchaseVat.' + k, { percent: true }));
+    // Fasta kostnader
+    const fixedSec = el('div', undefined, 'budget-group'); fixedSec.append(el('h3', 'Fasta kostnader per månad'), el('p', 'Tom ruta betyder att beloppet saknas. Skriv 0 om posten inte kostar något.', 'muted'));
+    const ft = el('div', undefined, 'table-scroll'), table = el('table', undefined, 'data-table budget-fixed'); ft.append(table); fixedSec.append(ft);
+    const fh = el('tr'); ['Kostnad', 'Belopp per månad', 'Beloppet är', 'Moms %', 'Per vecka', ''].forEach(h => fh.append(el('th', h))); table.append(el('thead')); table.tHead.append(fh);
+    const fb = el('tbody'); table.append(fb);
+    const fixedRow = (f, i) => {
+      const tr = el('tr'); tr.dataset.key = f.key || '';
+      const name = el('input'); name.value = f.name; name.maxLength = 60; name.className = 'fx-name'; name.setAttribute('aria-label', 'Namn');
+      const amount = el('input'); amount.inputMode = 'decimal'; amount.value = fmtInput(f.amount); amount.className = 'fx-amount'; amount.setAttribute('aria-label', 'Belopp per månad för ' + f.name);
+      const b = el('select'); b.className = 'fx-basis'; [['inkl', 'Inkl moms'], ['exkl', 'Exkl moms']].forEach(([v, t]) => { const o = el('option', t); o.value = v; o.selected = f.basis === v; b.append(o); });
+      const vat = el('input'); vat.inputMode = 'decimal'; vat.value = fmtInput(Math.round((f.vat ?? 0.25) * 1000) / 10); vat.className = 'fx-vat'; vat.setAttribute('aria-label', 'Moms');
+      const cells = [name, amount, b, vat].map(x => { const td = el('td'); td.append(x); return td; });
+      const fixed = budget.fixed.find(x => x.key === f.key);
+      const remove = el('td'); remove.append(button('Ta bort', 'text-button', () => { if (confirm('Ta bort ' + (name.value || 'raden') + ' från budgeten? Sparade utfall finns kvar i databasen.')) tr.remove(); }));
+      tr.append(...cells, el('td', fixed?.weekly === null || fixed?.weekly === undefined ? '–' : krd(fixed.weekly)), remove); fb.append(tr);
+    };
+    s.fixed.forEach(fixedRow);
+    fixedSec.append(button('Lägg till kostnad', 'secondary-button', () => fixedRow({ key: '', name: '', amount: null, basis: 'inkl', vat: 0.25 })));
+    root.append(fixedSec);
+    // Mixar
+    const mix = (title, rows, cols, cls) => {
+      const sec = el('div', undefined, 'budget-group'); sec.append(el('h3', title));
+      const wrap = el('div', undefined, 'table-scroll'), t = el('table', undefined, 'data-table ' + cls); wrap.append(t); sec.append(wrap);
+      const h = el('tr'); cols.forEach(c => h.append(el('th', c[1]))); t.append(el('thead')); t.tHead.append(h);
+      const b = el('tbody'); rows.forEach(r => { const tr = el('tr'); cols.forEach(([k, , kind]) => { const td = el('td'), i = el('input'); i.dataset.k = k; if (kind === 'text') { i.value = r[k]; i.maxLength = 60; } else { i.inputMode = 'decimal'; i.value = fmtInput(kind === 'pct' ? Math.round(r[k] * 100000) / 1000 : r[k]); i.dataset.kind = kind; } td.append(i); tr.append(td); }); b.append(tr); }); t.append(b);
+      root.append(sec);
+    };
+    mix('Försäljningsmix (används om kassarapportens moms saknas)', s.salesMix, [['name', 'Försäljning', 'text'], ['share', 'Andel %', 'pct'], ['rate', 'Moms %', 'pct']], 'budget-sales-mix');
+    mix('Kortavgifter per korttyp', s.cardMix, [['name', 'Korttyp', 'text'], ['share', 'Andel kortköp %', 'pct'], ['rate', 'Rörlig avgift %', 'pct'], ['fee', 'Kr per köp', 'num']], 'budget-card-mix');
+    g = group('Moms på kortavgiften');
+    settingsField(g, 'Moms på kortavgift (%)', s.cardFeeVat, 'cardFeeVat', { percent: true });
+  }
+  function collectSettings() {
+    const s = structuredClone(budget.settings); let bad = '';
+    const val = (input, percent) => { const n = parseNum(input.value); if (Number.isNaN(n)) bad = bad || 'Kontrollera siffran i ' + (input.labels?.[0]?.textContent || input.getAttribute('aria-label') || 'ett fält') + '.'; return n === null || Number.isNaN(n) ? null : percent ? Math.round(n * 1000) / 100000 : n; };
+    s.reportBasis = $('bs-reportBasis').value;
+    document.querySelectorAll('#bud-settings-body input[data-path]').forEach(i => { const v = val(i, i.dataset.percent === '1'); const [a, b] = i.dataset.path.split('.'); if (b) s[a][b] = v ?? 0; else s[a] = v ?? 0; });
+    s.fixed = [...document.querySelectorAll('.budget-fixed tbody tr')].map(tr => ({ key: tr.dataset.key || undefined, name: tr.querySelector('.fx-name').value.trim(), amount: val(tr.querySelector('.fx-amount')), basis: tr.querySelector('.fx-basis').value, vat: (val(tr.querySelector('.fx-vat')) ?? 0) / 100 }));
+    const mixRows = cls => [...document.querySelectorAll('.' + cls + ' tbody tr')].map(tr => { const r = {}; tr.querySelectorAll('input').forEach(i => { r[i.dataset.k] = i.dataset.kind ? (val(i, i.dataset.kind === 'pct') ?? 0) : i.value; }); return r; });
+    s.salesMix = mixRows('budget-sales-mix'); s.cardMix = mixRows('budget-card-mix');
+    if (bad) { note(bad); return null; }
+    return s;
+  }
+  async function saveBudgetWeek() {
+    const nums = { revenue: parseNum($('bud-revenue').value), salesVat: parseNum($('bud-vat').value), cardAmount: parseNum($('bud-card').value), cardCount: parseNum($('bud-cardcount').value) };
+    if (Object.values(nums).some(Number.isNaN)) { note('Kontrollera siffrorna. Använd bara siffror, gärna med komma för ören.'); return; }
+    const actuals = {}; let bad = false;
+    document.querySelectorAll('.budget-actual').forEach(i => { const n = parseNum(i.value); if (Number.isNaN(n)) bad = true; else if (n !== null) actuals[i.dataset.key] = n; });
+    if (bad) { note('Kontrollera beloppen under Faktiskt använt.'); return; }
+    const r = await adminCall('budget', { action: 'save_week', week: { weekStart: budWeek, kind: $('bud-kind').value, note: $('bud-note').value, ...nums, actuals } }, weekLabel(budWeek) + ' är sparad.');
+    if (r) { budget = r; renderBudget(); }
+  }
+  $('bud-save').addEventListener('click', saveBudgetWeek);
+  $('bud-week-form').addEventListener('submit', event => { event.preventDefault(); saveBudgetWeek(); });
+  $('bud-week').addEventListener('change', () => { budWeek = $('bud-week').value; renderBudget(); });
+  $('bud-prev').addEventListener('click', () => { budWeek = addDays(budWeek, -7); renderBudget(); });
+  $('bud-next').addEventListener('click', () => { budWeek = addDays(budWeek, 7); renderBudget(); });
+  $('bud-settings-form').addEventListener('submit', async event => {
+    event.preventDefault(); const settings = collectSettings(); if (!settings) return;
+    const r = await adminCall('budget', { action: 'save_settings', settings }, 'Budgetinställningarna är sparade.');
+    if (r) { budget = r; renderBudget(); $('bud-settings').open = true; }
+  });
+  $('bud-export').addEventListener('click', () => {
+    if (!budget) return;
+    downloadCsv('albert-veckobudget.csv', [['Vecka', 'Måndag', 'Typ', 'Omsättning ex moms', 'Moms', 'Försäljning inkl moms', 'Summa avsättningar', 'Kvar efter avsättningar', 'Plus/minus', 'Saldo', 'Fritt saldo', 'Status'],
+      ...budget.weeks.map(w => [w.week, w.weekStart, w.kind === 'example' ? 'Exempel' : 'Faktisk', w.revenueEx ?? '', w.salesVat ?? '', w.salesInkl ?? '', w.reserve ?? '', w.left ?? '', w.plusMinus ?? '', w.balanceOut, w.free, w.status].map(v => typeof v === 'number' ? String(v).replace('.', ',') : v))]);
+  });
 
   // ---------- Händelser ----------
   document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { switchView(b.dataset.view); drawer(false); window.scrollTo(0, 0); }));

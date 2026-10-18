@@ -173,3 +173,36 @@
 /* Huvudsiffror på mobil/surfplatta: två i bredd */
 @media (max-width:900px){.key-figures{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.key-figures>div{min-height:0;padding:16px}}
 @media (max-width:480px){.key-figures strong{font-size:30px;margin:6px 0 4px}.key-figures .booking-state{font-size:20px;margin:8px 0 4px}.key-figures span{font-size:13px}.key-figures small{font-size:12px}.workspace-heading h1{font-size:26px}}
+/* Veckobudget */
+.budget-heading{align-items:flex-end;flex-wrap:wrap}
+.budget-nav{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.budget-nav select{min-width:220px}
+.budget-warnings{margin-bottom:18px}
+[data-panel=budget] .admin-card{margin-bottom:18px}
+[data-panel=budget] .key-figures{margin-bottom:18px}
+.key-figures strong.negative,.budget-table td.negative{color:#8e3b2c}
+.budget-table td.positive{color:#46302a}
+.budget-table{min-width:860px}
+.budget-table td,.budget-table th{white-space:nowrap}
+.budget-table td:not(:nth-child(2)):not(:last-child){text-align:right;font-variant-numeric:tabular-nums}
+.budget-table tbody th{font-size:13px;color:#2b211d;text-align:left;font-weight:600;border-bottom:1px solid #eceee9}
+.budget-actual{width:120px;text-align:right;min-height:38px!important;padding:7px 10px!important}
+.budget-missing th,.budget-missing td:nth-child(2){color:#8e3b2c}
+.budget-sum th,.budget-sum td{background:#f6f3ee;font-weight:600}
+.budget-actions{display:flex;justify-content:flex-end;margin-top:16px}
+#bud-year tbody tr{cursor:pointer}
+#bud-year tbody th{text-align:left;font-size:13px;font-weight:600;color:#2b211d;border-bottom:1px solid #eceee9}
+#bud-year td{text-align:right;font-variant-numeric:tabular-nums}
+#bud-year td:nth-child(2),#bud-year td:last-child{text-align:left}
+#bud-year tr.selected th,#bud-year tr.selected td{background:#f1ebe4}
+.budget-settings>summary{font-weight:600;font-size:18px;cursor:pointer;padding:4px 0}
+.budget-group{margin-top:24px}
+.budget-group h3{font-size:15px;margin:0 0 4px;color:#46302a}
+.budget-group .data-table{min-width:560px}
+.budget-group .data-table input{width:100%;min-height:38px;padding:7px 10px}
+.budget-group .data-table td{padding:6px 8px}
+.budget-group>.secondary-button{margin-top:10px}
+@media (max-width:700px){.budget-nav{width:100%}.budget-nav select{flex:1 1 100%;order:-1;min-width:0}.budget-nav button{flex:1}.budget-actions .admin-primary{width:100%}}
+.budget-warnings{background:#f3e9dd;border:1px solid #dcc6ad;border-radius:6px;padding:12px 16px;font-size:13px;color:#46302a}
+.budget-group .data-table th{text-align:left}
+@media (max-width:480px){#bud-figures strong{font-size:24px}}
