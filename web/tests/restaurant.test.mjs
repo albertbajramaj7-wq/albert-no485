@@ -269,3 +269,19 @@ test('personal: ogiltig roll ger 400 och inget konto blir kvar', async () => {
   assert.equal(res.status, 400);
   assert.equal(t.auth.users.has('agare2@example.se'), false);
 });
+
+test('telefonbokning: personal ser lediga tider och bokar utan e-post, taket gäller', async () => {
+  const token = owner();
+  const av = await t.call('GET', '/api/admin/availability?date=2026-11-06&count=2&mode=here&guests=2', undefined, { token });
+  assert.equal(av.status, 200);
+  assert.ok(av.body.slots.length > 10);
+  const res = await t.call('POST', '/api/admin/phone-booking', { key: crypto.randomUUID(), date: '2026-11-06', time: '18:00', count: 8, mode: 'away', guests: 0, contact: { name: 'Ringde in', phone: '0701112233' } }, { token });
+  assert.equal(res.status, 200, JSON.stringify(res.body));
+  const full = await t.call('POST', '/api/admin/phone-booking', { key: crypto.randomUUID(), date: '2026-11-06', time: '18:00', count: 1, mode: 'away', guests: 0, contact: { name: 'En till', phone: '0701112244' } }, { token });
+  assert.equal(full.status, 409);
+  assert.equal((await t.call('POST', '/api/admin/phone-booking', { key: crypto.randomUUID(), date: '2026-11-06', time: '18:15', count: 1, mode: 'away', guests: 0, contact: { name: 'X', phone: '0701112255' } })).status, 401);
+  const day = await t.call('GET', '/api/admin/day?date=2026-11-06', undefined, { token });
+  const b = day.body.bookings.find(x => x.name === 'Ringde in');
+  assert.equal(b.source, 'staff');
+  assert.equal(b.email, '');
+});

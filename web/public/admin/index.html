@@ -20,6 +20,7 @@
   <aside class="admin-drawer" id="admin-drawer" aria-label="Meny">
     <nav class="admin-tabs" aria-label="Admin" id="admin-tabs" hidden>
       <button type="button" data-view="day" aria-current="page">Dagsvy</button>
+      <button type="button" data-view="phone">Telefonbokning</button>
       <button type="button" data-view="tasks">Arbetsuppgifter <span id="task-tab-count" class="tab-count"></span></button>
       <button type="button" data-view="history">Historik</button>
       <hr data-role="admin" hidden>
@@ -88,10 +89,39 @@
         <details class="day-settings" id="day-settings" hidden><summary>Bokningsinställningar för dagen</summary><form id="settings-form"><label class="admin-checkbox"><input id="paused" type="checkbox">Pausa nya bokningar den här dagen</label><label class="admin-checkbox"><input id="after-closing" type="checkbox">Tillåt att gäster sitter kvar efter stängning</label><button type="submit" class="secondary-button" data-mutation>Spara inställningar</button><p class="field-help" id="limits-help"></p></form></details>
         <section class="bookings-section" aria-labelledby="bookings-title">
           <p id="email-setup" class="email-setup" hidden></p>
-          <div class="section-heading"><h2 id="bookings-title">Bokningar <span id="booking-count" class="heading-count"></span></h2><a href="/boka-pizza/" class="admin-primary" target="_blank" rel="noopener">Ny bokning</a></div>
+          <div class="section-heading"><h2 id="bookings-title">Bokningar <span id="booking-count" class="heading-count"></span></h2><button type="button" class="admin-primary" data-view="phone">Ny bokning (telefon)</button></div>
           <div class="booking-toolbar"><label class="sr-only" for="search-bookings">Sök bokning</label><input id="search-bookings" type="search" placeholder="Sök namn eller telefon"><label class="sr-only" for="status-filter">Visa bokningar</label><select id="status-filter"><option value="active">Aktiva</option><option value="all">Alla bokningar</option><option value="confirmed">Bokade</option><option value="checked_in">Incheckade</option><option value="completed">Avslutade</option><option value="cancelled">Avbokade</option></select><button id="export-bookings" type="button" class="text-button">Exportera CSV</button></div>
           <div id="booking-list"></div>
         </section>
+      </section>
+      <section data-panel="phone" hidden>
+        <div class="phone-layout">
+          <div class="phone-main">
+            <section class="admin-card">
+              <h2>Vad vill kunden ha?</h2>
+              <div class="phone-row">
+                <div><label for="ph-count">Antal pizzor</label><select id="ph-count"></select></div>
+                <div><span class="ph-label">Äta här eller ta med</span><div class="seg" role="group" aria-label="Äta här eller ta med"><button type="button" data-ph-mode="here" aria-pressed="true">Äta här</button><button type="button" data-ph-mode="away" aria-pressed="false">Ta med</button></div></div>
+                <div id="ph-guests-wrap"><label for="ph-guests">Gäster</label><select id="ph-guests"></select></div>
+              </div>
+            </section>
+            <section class="admin-card">
+              <div class="section-heading"><h2>Lediga tider</h2><span class="muted" id="ph-status"></span></div>
+              <div id="ph-slots"></div>
+              <p class="field-help">Siffran visar hur många pizzor som går att boka på tiden. Gråa tider är fullbokade eller har passerat.</p>
+            </section>
+          </div>
+          <aside class="admin-card phone-form-card">
+            <h2>Kundens uppgifter</h2>
+            <p id="ph-selected" class="ph-selected">Välj en tid i listan.</p>
+            <form id="ph-form" class="ph-form">
+              <label for="ph-name">Namn</label><input id="ph-name" required minlength="2" maxlength="100" autocomplete="off">
+              <label for="ph-phone">Telefon</label><input id="ph-phone" type="tel" required minlength="8" maxlength="30" autocomplete="off">
+              <label for="ph-email">E-post <span class="muted">(valfritt, för bekräftelse)</span></label><input id="ph-email" type="email" maxlength="180" autocomplete="off">
+              <button type="submit" class="admin-primary" id="ph-submit" disabled>Boka tiden</button>
+            </form>
+          </aside>
+        </div>
       </section>
       <section data-panel="tasks" hidden>
         <div class="section-heading task-heading"><div><h2>Dagens checklistor</h2><p class="muted">Kryssa av när uppgiften är klar. Varje dag har sin egen lista.</p></div><span id="task-count" class="progress-label"></span></div>

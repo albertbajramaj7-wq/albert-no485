@@ -120,3 +120,30 @@
 .admin-app input::-webkit-date-and-time-value{text-align:left;margin:0}
 .config-grid>div,.task-form>div,.waste-form>div,.day-controls>*{min-width:0}
 .day-controls input[type=date]{width:auto;min-width:150px}
+/* Telefonbokning */
+.phone-layout{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:18px;align-items:start}
+.phone-main{display:grid;gap:18px;min-width:0}
+.phone-row{display:flex;gap:18px;flex-wrap:wrap;align-items:end;margin-top:14px}
+.phone-row>div{min-width:150px}.phone-row label,.ph-label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.phone-row select{min-width:150px}
+.seg{display:inline-flex;border:1px solid #d9cfc5;border-radius:8px;overflow:hidden}
+.seg button{border:0;border-radius:0;background:#fff;color:var(--text);padding:10px 18px;font-weight:600;min-height:46px}
+.seg button+button{border-left:1px solid #d9cfc5}
+.seg button[aria-pressed=true]{background:var(--g-900);color:#fff}
+.ph-group{font-size:13px;text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin:18px 0 10px}
+.ph-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px}
+.ph-slot{display:grid;gap:2px;text-align:left;background:#fff;border:1px solid #ddd3c9;border-radius:10px;padding:10px 12px;min-height:76px;cursor:pointer;color:var(--text)}
+.ph-slot strong{font-size:20px;font-variant-numeric:tabular-nums;color:var(--g-900)}
+.ph-slot .ph-left{font-size:12px;font-weight:600;color:#3e6b46}
+.ph-slot .ph-seats,.ph-slot .ph-booked{font-size:11px;color:var(--muted)}
+.ph-slot:hover:not(:disabled){border-color:var(--g-700)}
+.ph-slot[aria-pressed=true]{background:var(--g-900);border-color:var(--g-900)}
+.ph-slot[aria-pressed=true] *{color:#fff!important}
+.ph-slot.full{background:var(--soft);cursor:not-allowed;opacity:.65}
+.ph-slot.full .ph-left{color:#9a4b3a}
+.phone-form-card{position:sticky;top:90px}
+.ph-selected{background:var(--soft);border-radius:8px;padding:12px 14px;font-size:14px;margin:12px 0 16px;color:var(--muted)}
+.ph-selected.chosen{background:var(--g-100);color:var(--text);font-weight:600}
+.ph-form{display:grid;gap:6px}.ph-form label{font-size:13px;color:var(--muted);margin-top:6px}.ph-form input{width:100%}.ph-form button{margin-top:14px;width:100%}
+@media (max-width:900px){.phone-layout{grid-template-columns:1fr}.phone-form-card{position:static}}
+.admin-app .admin-primary,.admin-app .danger-button,.admin-app .menu-toggle{color:#fff}

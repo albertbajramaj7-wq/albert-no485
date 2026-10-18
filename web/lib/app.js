@@ -133,6 +133,17 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         return reply({ ok: true });
       }
       if (path === '/api/admin/day' && method === 'GET') return reply(await withEmail(await rpc('api_admin_day', { actor, date: q('date') || stockholmToday(now()) })));
+      if (path === '/api/admin/availability' && method === 'GET') {
+        return reply(await rpc('api_availability', { date: q('date'), count: Number(q('count')), mode: q('mode'), guests: Number(q('guests')) }));
+      }
+      if (path === '/api/admin/phone-booking' && method === 'POST') {
+        // Bokning som personalen lägger in, t.ex. när en kund ringer. Samma kapacitetsregler som på hemsidan.
+        const booking = await rpc('api_create_booking', { actor, key: input.key, date: input.date, time: input.time, count: input.count, mode: input.mode, guests: input.guests,
+          contact: { name: input.contact?.name, email: input.contact?.email || '', phone: input.contact?.phone } });
+        let email = { status: 'none' };
+        if (input.contact?.email) { try { email = await sendBookingEmail(rpc, booking.id, env, { now: now(), fetcher }); } catch { email = { status: 'pending' }; } }
+        return reply({ booking, email: { status: email.status } });
+      }
       if (path === '/api/admin/counter' && method === 'POST') return reply(await withEmail(await rpc('api_admin_counter', { ...input, actor })));
       if (path === '/api/admin/settings' && method === 'POST') return reply(await withEmail(await rpc('api_admin_save_day', { ...input, actor })));
       if (path === '/api/admin/booking' && method === 'POST') return reply(await withEmail(await rpc('api_admin_booking', { ...input, actor })));

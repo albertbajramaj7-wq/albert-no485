@@ -97,14 +97,15 @@
     if (open) document.querySelector('#admin-tabs [aria-current="page"]')?.focus({ preventScroll: true });
   }
   function switchView(value) {
-    if (!['day', 'tasks', 'history', 'stats', 'menu', 'staff', 'config'].includes(value) || (['stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
+    if (!['day', 'phone', 'tasks', 'history', 'stats', 'menu', 'staff', 'config'].includes(value) || (['stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
     view = value;
     document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== value);
     document.querySelectorAll('[data-view]').forEach(b => { if (b.dataset.view === value) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    $('view-title').textContent = { day: 'Dagsvy', tasks: 'Arbetsuppgifter', history: 'Historik', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
+    $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', tasks: 'Arbetsuppgifter', history: 'Historik', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
     const ownPage = ['stats', 'menu', 'staff', 'config'].includes(value);
     $('day-controls').hidden = ownPage; $('day-label').hidden = ownPage;
     note('');
+    if (value === 'phone') loadPhone();
     if (value === 'stats') loadStats();
     if (value === 'menu') loadMenu();
     if (value === 'staff') loadStaff();
@@ -275,6 +276,59 @@
     $('limits-help').textContent = 'Gäller valt datum. ' + data.limits.slot + ' pizzor per kvart, ' + data.limits.hour + ' per timme och ' + data.limits.seats + ' sittplatser.';
     renderBookings(); renderWaste(); renderTasks(); renderHistory(); lock();
     if (!isAdmin() && ['stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
+    if (view === 'phone') loadPhone();
+  }
+
+  // ---------- Telefonbokning ----------
+  let phMode = 'here', phSlot = null, phAvail = null, phSerial = 0;
+  function phFill(select, max, unit, keep) {
+    const current = Number(select.value) || keep;
+    if (select.options.length !== max) select.replaceChildren(...Array.from({ length: max }, (_, i) => { const o = el('option', (i + 1) + ' ' + (i ? unit[1] : unit[0])); o.value = i + 1; return o; }));
+    select.value = String(Math.min(current, max));
+  }
+  async function loadPhone() {
+    if (!data) return;
+    phFill($('ph-count'), data.limits.maxCount, ['pizza', 'pizzor'], 2);
+    phFill($('ph-guests'), Math.min(data.limits.maxGuests, 40), ['gäst', 'gäster'], 2);
+    $('ph-guests-wrap').hidden = phMode === 'away';
+    document.querySelectorAll('[data-ph-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.phMode === phMode)));
+    const current = ++phSerial, q = new URLSearchParams({ date: data.day.date, count: $('ph-count').value, mode: phMode, guests: phMode === 'here' ? $('ph-guests').value : '0' });
+    $('ph-status').textContent = 'Hämtar tider.';
+    try {
+      const result = await request('availability?' + q);
+      if (current !== phSerial) return;
+      phAvail = result; if (phSlot && !result.slots.some(s => s.time === phSlot.time && s.bookable)) phSlot = null;
+      renderPhone();
+    } catch (error) { if (current === phSerial) { $('ph-status').textContent = ''; $('ph-slots').replaceChildren(el('p', error.message, 'empty-state')); } }
+  }
+  function renderPhone() {
+    const root = $('ph-slots'); root.replaceChildren();
+    const free = phAvail.slots.filter(s => s.bookable).length;
+    $('ph-status').textContent = phAvail.closed ? 'Stängt den här dagen' : phAvail.paused ? 'Bokningen är pausad' : free + ' lediga tider · ' + readable(data.day.date);
+    if (phAvail.closed || !phAvail.slots.length) root.append(el('p', 'Restaurangen har stängt den här dagen. Välj ett annat datum uppe till höger.', 'empty-state'));
+    const live = data.bookings.filter(b => b.status !== 'cancelled');
+    for (const [title, rows] of [['Lunch', phAvail.slots.filter(s => s.minute < 900)], ['Kväll', phAvail.slots.filter(s => s.minute >= 900)]]) {
+      if (!rows.length) continue;
+      root.append(el('h3', title, 'ph-group'));
+      const grid = el('div', undefined, 'ph-grid');
+      rows.forEach(slot => {
+        const here = live.filter(b => b.ready_min === slot.minute), pizzas = here.reduce((n, b) => n + b.count, 0);
+        const b = el('button', undefined, 'ph-slot' + (slot.bookable ? '' : ' full')); b.type = 'button'; b.disabled = !slot.bookable;
+        b.setAttribute('aria-pressed', String(phSlot?.time === slot.time));
+        const nowMin = (() => { const p = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date()).split(':'); return Number(p[0]) * 60 + Number(p[1]); })();
+        const why = slot.bookable ? slot.remaining + ' pizzor kvar' : data.day.date === today() && slot.minute - data.limits.arrival < nowMin ? 'Passerad' : slot.remaining < Number($('ph-count').value) ? 'Fullt' : phMode === 'here' && slot.seats < Number($('ph-guests').value) ? 'Inga platser' : 'Ej ledig';
+        b.append(el('strong', slot.time), el('span', why, 'ph-left'));
+        if (phMode === 'here' && slot.seats !== null) b.append(el('span', slot.seats + ' platser', 'ph-seats'));
+        if (here.length) b.append(el('span', here.length + (here.length === 1 ? ' bokning' : ' bokningar') + ' · ' + pizzas + ' st', 'ph-booked'));
+        b.addEventListener('click', () => { phSlot = slot; renderPhone(); $('ph-name').focus(); });
+        grid.append(b);
+      });
+      root.append(grid);
+    }
+    const count = Number($('ph-count').value), guests = Number($('ph-guests').value);
+    $('ph-selected').textContent = phSlot ? short(data.day.date) + ' kl. ' + phSlot.time + ' · ' + count + (count === 1 ? ' pizza' : ' pizzor') + ' · ' + (phMode === 'here' ? 'äta här, ' + guests + ' gäster' : 'ta med') + '. Kom ' + time(phSlot.minute - data.limits.arrival) + '.' : 'Välj en tid i listan.';
+    $('ph-selected').classList.toggle('chosen', !!phSlot);
+    $('ph-submit').disabled = !phSlot || busy;
   }
 
   // ---------- Statistik ----------
@@ -420,6 +474,21 @@
   $('export-stats').addEventListener('click', () => {
     if (!stats) return;
     downloadCsv('albert-statistik-' + stats.from + '-' + stats.to + '.csv', [['Datum', 'Bokade pizzor', 'Drop-in', 'Svinn', 'Gäster', 'Avbokade', 'Förberedda', 'Uppskattad försäljning (kr)'], ...stats.days.map(d => [d.date, d.bookedPizzas, d.dropin, d.waste, d.guests, d.cancelled, d.prepared ?? '', (d.bookedPizzas + d.dropin) * stats.avgPizzaPrice])]);
+  });
+  document.querySelectorAll('[data-ph-mode]').forEach(b => b.addEventListener('click', () => { phMode = b.dataset.phMode; phSlot = null; loadPhone(); }));
+  $('ph-count').addEventListener('change', () => loadPhone()); $('ph-guests').addEventListener('change', () => loadPhone());
+  $('ph-form').addEventListener('submit', async event => {
+    event.preventDefault(); if (!event.target.reportValidity() || !phSlot || busy) return;
+    busy = true; $('ph-submit').disabled = true; note('Sparar bokningen.');
+    const body = { key: crypto.randomUUID(), date: data.day.date, time: phSlot.time, count: Number($('ph-count').value), mode: phMode, guests: phMode === 'here' ? Number($('ph-guests').value) : 0,
+      contact: { name: $('ph-name').value.trim(), phone: $('ph-phone').value.trim(), email: $('ph-email').value.trim() } };
+    try {
+      const r = await request('phone-booking', body);
+      note('Bokningen är sparad: ' + body.contact.name + ' kl. ' + r.booking.time + ', kom ' + r.booking.arrival + '.' + (body.contact.email ? (r.email.status === 'sent' ? ' Bekräftelse skickad.' : ' Mejlbekräftelsen kunde inte skickas.') : ''), true);
+      event.target.reset(); phSlot = null;
+    } catch (error) { if (error.status === 401) { showLogin('Du har loggats ut. Logga in igen.'); return; } note(error.message); }
+    finally { busy = false; }
+    await load(true);
   });
   $('menu-add').addEventListener('click', () => { if (menu) { renderMenu(menuForm({ active: false, category: 'pizza' })); $('menu-list').querySelector('input')?.focus(); } });
   $('staff-form').addEventListener('submit', async event => {
