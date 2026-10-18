@@ -42,7 +42,7 @@
   function showLogin(message) {
     data = undefined;
     $('login-panel').hidden = false; $('admin-content').hidden = true; $('admin-tabs').hidden = true; $('day-controls').hidden = true;
-    $('logout').hidden = true; $('account-button').hidden = true; $('account-name').textContent = ''; $('day-label').textContent = '';
+    $('logout').hidden = true; $('account-button').hidden = true; $('menu-toggle').hidden = true; drawer(false); $('account-name').textContent = ''; $('day-label').textContent = '';
     $('view-title').textContent = 'Logga in'; $('login-message').textContent = message || 'Logga in för att hantera restaurangen.';
     $('loading').hidden = true; $('login-email').focus();
   }
@@ -54,7 +54,7 @@
       if (current !== serial) return;
       data = result; needsRefresh = false; dirty = false;
       $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['stats', 'menu', 'staff', 'config'].includes(view);
-      $('logout').hidden = false; $('account-button').hidden = false;
+      $('logout').hidden = false; $('account-button').hidden = false; $('menu-toggle').hidden = false;
       render();
       if (!silent) note('');
     } catch (error) {
@@ -88,6 +88,13 @@
     try { const result = await request(path, body); if (message) note(message, true); else if (body) note(''); return result; }
     catch (error) { if (error.status === 401) showLogin('Du har loggats ut. Logga in igen.'); else note(error.message); return null; }
     finally { busy = false; lock(); }
+  }
+  function drawer(open) {
+    document.body.classList.toggle('drawer-open', open);
+    $('menu-toggle').setAttribute('aria-expanded', String(open));
+    $('menu-toggle-label').textContent = open ? 'Stäng' : 'Meny';
+    $('drawer-backdrop').hidden = !open;
+    if (open) document.querySelector('#admin-tabs [aria-current="page"]')?.focus({ preventScroll: true });
   }
   function switchView(value) {
     if (!['day', 'tasks', 'history', 'stats', 'menu', 'staff', 'config'].includes(value) || (['stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
@@ -245,7 +252,7 @@
   }
   function render() {
     $('account-name').textContent = data.actor.name + ' · ' + roles[data.actor.role];
-    document.querySelectorAll('[data-role="admin"]').forEach(b => { b.hidden = !isAdmin(); });
+    document.querySelectorAll('#admin-tabs [data-role="admin"]').forEach(b => { b.hidden = !isAdmin(); });
     $('day-settings').hidden = !isAdmin();
     $('email-setup').hidden = !!data.emailSetup?.configured;
     $('email-setup').textContent = 'Mejlbekräftelser är inte aktiverade ännu. Resend behöver en API-nyckel och en verifierad avsändare. Bokningar sparas som vanligt.';
@@ -374,7 +381,10 @@
   }
 
   // ---------- Händelser ----------
-  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { switchView(b.dataset.view); drawer(false); window.scrollTo(0, 0); }));
+  $('menu-toggle').addEventListener('click', () => drawer(!document.body.classList.contains('drawer-open')));
+  $('drawer-backdrop').addEventListener('click', () => drawer(false));
+  document.addEventListener('keydown', event => { if (event.key === 'Escape' && document.body.classList.contains('drawer-open')) { drawer(false); $('menu-toggle').focus(); } });
   document.querySelectorAll('[data-phase]').forEach(b => b.addEventListener('click', () => { taskPhase = b.dataset.phase; renderTasks(); }));
   document.querySelectorAll('[data-period]').forEach(b => b.addEventListener('click', () => { statsDays = Number(b.dataset.period); document.querySelectorAll('[data-period]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); loadStats(); }));
   $('only-open-tasks').addEventListener('change', renderTasks);

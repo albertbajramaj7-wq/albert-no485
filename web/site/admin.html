@@ -11,25 +11,31 @@
   <a class="skip" href="#workspace">Till innehållet</a>
   <header class="admin-topbar">
     <div class="admin-topbar-inner">
+      <button type="button" id="menu-toggle" class="menu-toggle" aria-expanded="false" aria-controls="admin-drawer" hidden><span class="burger" aria-hidden="true"><i></i><i></i><i></i></span><span id="menu-toggle-label">Meny</span></button>
       <a href="/" class="admin-brand" aria-label="Albert startsida"><img src="/assets/albert-transparent.png" alt="Albert NO.485" width="1024" height="1024"></a>
-      <span class="admin-label">Admin</span>
-      <div class="account-links"><span id="account-name"></span><button type="button" id="account-button" class="topbar-button" hidden>Mitt konto</button><a href="/" target="_blank" rel="noopener">Hemsidan</a><button type="button" id="logout" class="topbar-button" hidden>Logga ut</button></div>
+      <div class="account-links"><span id="account-name"></span><button type="button" id="account-button" class="topbar-button" hidden>Mitt konto</button><button type="button" id="logout" class="topbar-button" hidden>Logga ut</button></div>
     </div>
   </header>
+  <div class="drawer-backdrop" id="drawer-backdrop" hidden></div>
+  <aside class="admin-drawer" id="admin-drawer" aria-label="Meny">
+    <nav class="admin-tabs" aria-label="Admin" id="admin-tabs" hidden>
+      <button type="button" data-view="day" aria-current="page">Dagsvy</button>
+      <button type="button" data-view="tasks">Arbetsuppgifter <span id="task-tab-count" class="tab-count"></span></button>
+      <button type="button" data-view="history">Historik</button>
+      <hr data-role="admin" hidden>
+      <button type="button" data-view="stats" data-role="admin" hidden>Statistik</button>
+      <button type="button" data-view="menu" data-role="admin" hidden>Meny</button>
+      <button type="button" data-view="staff" data-role="admin" hidden>Personal</button>
+      <button type="button" data-view="config" data-role="admin" hidden>Inställningar</button>
+      <hr>
+      <a href="/" target="_blank" rel="noopener">Hemsidan</a>
+    </nav>
+  </aside>
   <main id="workspace" class="admin-workspace">
     <div class="workspace-heading">
       <div><h1 id="view-title">Dagsvy</h1><p id="day-label"></p></div>
       <div class="day-controls" id="day-controls"><label class="sr-only" for="work-date">Arbetsdag</label><input type="date" id="work-date"><button id="today" type="button">I dag</button><button id="refresh" type="button">Uppdatera</button></div>
     </div>
-    <nav class="admin-tabs" aria-label="Admin" id="admin-tabs" hidden>
-      <button type="button" data-view="day" aria-current="page">Dagsvy</button>
-      <button type="button" data-view="tasks">Arbetsuppgifter <span id="task-tab-count" class="tab-count"></span></button>
-      <button type="button" data-view="history">Historik</button>
-      <button type="button" data-view="stats" data-role="admin" hidden>Statistik</button>
-      <button type="button" data-view="menu" data-role="admin" hidden>Meny</button>
-      <button type="button" data-view="staff" data-role="admin" hidden>Personal</button>
-      <button type="button" data-view="config" data-role="admin" hidden>Inställningar</button>
-    </nav>
     <div id="notice" class="admin-notice" role="status" hidden></div>
     <section id="login-panel" class="login-panel" hidden>
       <h2>Välkommen tillbaka.</h2>
