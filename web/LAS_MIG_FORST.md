@@ -14,7 +14,7 @@ när Albert har godkänt det.
 | `api/router.js` | Serverfunktionen på Vercel. Tar emot alla anrop till `/api/...`. |
 | `lib/` | Serverkoden: anrop till databasen och inloggningen, bekräftelsemejl. Inga externa paket. |
 | `supabase/migrations/` | Databasen: tabeller, regler och all bokningslogik. |
-| `tests/` | 23 automatiska tester som körs mot en riktig Postgres-databas. |
+| `tests/` | 27 automatiska tester som körs mot en riktig Postgres-databas. |
 | `.env.example` | Namnen på de inställningar som behöver läggas in i Vercel. |
 
 ## Vad som är nytt jämfört med ChatGPT:s version
@@ -51,14 +51,19 @@ skydd mot dubbelbokning, dagens pizzantal, drop-in, arbetsuppgifter, historik, C
    - `SUPABASE_ANON_KEY` = anon key
    - `SUPABASE_SERVICE_ROLE_KEY` = service_role key (hemlig, får bara finnas här)
    - `ADMIN_OWNER_EMAIL` = din e-post från steg 1.4
+   - `APP_ORIGIN` = hemsidans adress, till exempel `https://www.albertno485.com` (när domänen är flyttad)
 4. Klicka **Deploy**. Du får en testadress som slutar på `.vercel.app`.
 
-### 3. Testa
+### 3. Skydd mot överbelastning (rekommenderas)
+Slå på Vercel Firewall och lägg en begränsning (rate limit) på `/api/auth/login` och `/api/bookings`,
+till exempel 10 anrop per minut per IP-adress. Databasen stoppar redan fler än 3 bokningar per gäst och dag.
+
+### 4. Testa
 1. Öppna testadressen och gör en provbokning.
 2. Gå till `/admin/` och logga in. Första gången blir ditt konto ägarkonto.
 3. Lägg till personal under **Personal** och prova att logga in som dem.
 
-### 4. Byta till albertno485.com (senare, efter ditt godkännande)
+### 5. Byta till albertno485.com (senare, efter ditt godkännande)
 Domänen pekar fortfarande på Wix. Den flyttas först när allt är testat och du har sagt ja.
 Innan dess behöver vi gå igenom bokningar som redan finns i Wix, så att ingen gäst tappas bort.
 

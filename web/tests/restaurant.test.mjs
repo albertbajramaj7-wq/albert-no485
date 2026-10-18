@@ -232,3 +232,40 @@ test('ändringar loggas i historiken', async () => {
   assert.ok(actions.includes('waste_registered'));
   assert.ok(actions.includes('waste_voided'));
 });
+
+test('högst 3 webbokningar per gäst och dag', async () => {
+  const guest = { contact: { name: 'Bo Berg', email: 'bo@example.se', phone: '0709999999' }, date: '2026-11-05', mode: 'away', guests: 0, count: 1 };
+  const statuses = [];
+  for (const time of ['12:15', '12:30', '12:45', '13:00']) statuses.push((await book({ ...guest, time })).status);
+  assert.deepEqual(statuses, [201, 201, 201, 409]);
+});
+
+test('klienten kan inte sätta actor eller now själv', async () => {
+  const token = owner();
+  t.auth.addUser('lisa@example.se', 'losenord-123', 'Lisa');
+  await t.call('POST', '/api/admin/staff', { action: 'create', name: 'Lisa', email: 'lisa2@example.se', role: 'staff', password: 'tillfalligt-123' }, { token });
+  const lisa = t.auth.tokenFor('lisa2@example.se');
+  const list = (await t.call('GET', '/api/admin/staff', undefined, { token })).body;
+  const albertId = list.find(s => s.role === 'owner').userId;
+  // Personal försöker utge sig för att vara ägaren.
+  assert.equal((await t.call('GET', '/api/admin/stats', undefined, { token: lisa })).status, 403);
+  assert.equal((await t.call('POST', '/api/admin/config', { action: 'close_date', date: '2026-11-09', actor: albertId }, { token: lisa })).status, 403);
+});
+
+test('ägarkontot skapas bara för bekräftad e-post', async () => {
+  const s = setup();
+  try {
+    const u = s.auth.addUser('albert@albertno485.com', 'hemligt-losen-1', 'Falsk');
+    u.email_confirmed_at = null;
+    assert.equal((await s.call('GET', '/api/admin/day', undefined, { token: s.auth.tokenFor('albert@albertno485.com') })).status, 403);
+    u.email_confirmed_at = '2026-10-01T00:00:00Z';
+    assert.equal((await s.call('GET', '/api/admin/day', undefined, { token: s.auth.tokenFor('albert@albertno485.com') })).status, 200);
+  } finally { s.close(); }
+});
+
+test('personal: ogiltig roll ger 400 och inget konto blir kvar', async () => {
+  const token = owner();
+  const res = await t.call('POST', '/api/admin/staff', { action: 'create', name: 'Ägare Två', email: 'agare2@example.se', role: 'owner', password: 'tillfalligt-123' }, { token });
+  assert.equal(res.status, 400);
+  assert.equal(t.auth.users.has('agare2@example.se'), false);
+});

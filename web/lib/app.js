@@ -5,6 +5,7 @@ import { emailConfiguration, sendBookingEmail } from './email.js';
 
 const AT = 'alb_at', RT = 'alb_rt';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const LOCAL = /^(localhost|127\.0\.0\.1|\[::1\])$/;
 
 function json(value, status = 200, cookies = []) {
   const headers = new Headers({ 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' });
@@ -37,7 +38,7 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
   const ownerEmail = (env.ADMIN_OWNER_EMAIL || '').trim().toLowerCase();
 
   async function session(request, url) {
-    const secure = url.protocol === 'https:';
+    const secure = !LOCAL.test(url.hostname);
     const jar = parseCookies(request.headers.get('cookie'));
     let token = jar[AT], user = token ? await auth.user(token) : null;
     const setCookies = [];
@@ -49,13 +50,15 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
       }
     }
     if (!user?.id) throw Object.assign(new AppError(401, 'Logga in för att öppna admin.'), { clearCookies: !!(jar[AT] || jar[RT]) });
-    const actor = await rpc('api_authorize', { userId: user.id, email: user.email || '', ownerEmail, name: user.user_metadata?.name || '' });
+    const actor = await rpc('api_authorize', { userId: user.id, email: user.email || '', emailConfirmed: !!user.email_confirmed_at, ownerEmail, name: user.user_metadata?.name || '' });
     return { actor, token, setCookies };
   }
 
   async function handle(request) {
     const url = new URL(request.url);
-    const secure = url.protocol === 'https:';
+    const secure = !LOCAL.test(url.hostname);
+    const forwarded = request.headers.get('x-forwarded-host');
+    const allowedOrigins = new Set([url.origin, env.APP_ORIGIN, forwarded && `https://${forwarded}`].filter(Boolean));
     let path = url.pathname.replace(/\/+$/, '');
     if (!path.startsWith('/api/') || path === '/api/router') path = '/api/' + (url.searchParams.get('path') || '').replace(/^\/+|\/+$/g, '');
     const method = request.method;
@@ -64,7 +67,7 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
       if (method !== 'GET' && method !== 'POST') throw new AppError(405, 'Metoden stöds inte.');
       if (method === 'POST') {
         const origin = request.headers.get('origin');
-        if ((origin && origin !== url.origin) || request.headers.get('sec-fetch-site') === 'cross-site') throw new AppError(403, 'Åtgärden måste skickas från hemsidan.');
+        if ((origin && !allowedOrigins.has(origin)) || request.headers.get('sec-fetch-site') === 'cross-site') throw new AppError(403, 'Åtgärden måste skickas från hemsidan.');
         if (!request.headers.get('content-type')?.includes('application/json')) throw new AppError(415, 'Använd JSON för den här åtgärden.');
         if (Number(request.headers.get('content-length') || 0) > 10000) throw new AppError(413, 'För mycket information skickades.');
       }
@@ -73,6 +76,8 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
       let input = {};
       if (bodyText) { try { input = JSON.parse(bodyText); } catch { throw new AppError(400, 'Informationen kunde inte läsas.'); } }
       if (!input || typeof input !== 'object' || Array.isArray(input)) throw new AppError(400, 'Informationen kunde inte läsas.');
+      // Fält som bara servern får sätta.
+      delete input.actor; delete input.now; delete input.emailConfirmed;
       const q = name => url.searchParams.get(name);
 
       // ---------- Publikt ----------
@@ -101,7 +106,7 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         const email = String(input.email || '').trim().toLowerCase(), password = String(input.password || '');
         if (!email || !password) throw new AppError(400, 'Skriv e-post och lösenord.');
         const result = await auth.login(email, password);
-        const actor = await rpc('api_authorize', { userId: result.user?.id, email: result.user?.email || email, ownerEmail, name: result.user?.user_metadata?.name || '' });
+        const actor = await rpc('api_authorize', { userId: result.user?.id, email: result.user?.email || email, emailConfirmed: !!result.user?.email_confirmed_at, ownerEmail, name: result.user?.user_metadata?.name || '' });
         return json({ ok: true, actor: { name: actor.name, role: actor.role } }, 200, [
           cookie(AT, result.access_token, result.expires_in || 3600, secure), cookie(RT, result.refresh_token, 60 * 60 * 24 * 30, secure)]);
       }
@@ -139,6 +144,7 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
       }
       if (path === '/api/admin/stats' && method === 'GET') {
         const to = q('to') || stockholmToday(now());
+        if (!DAY.test(to) || Number.isNaN(Date.parse(to + 'T12:00:00Z'))) throw new AppError(400, 'Välj ett giltigt datum.');
         const from = q('from') || new Date(Date.parse(to + 'T12:00:00Z') - 6 * 864e5).toISOString().slice(0, 10);
         if (!DAY.test(from) || !DAY.test(to)) throw new AppError(400, 'Välj ett giltigt datum.');
         return reply(await rpc('api_admin_stats', { actor, from, to }));
@@ -150,13 +156,16 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         if (input.action === 'create') {
           // Behörigheten kontrolleras i databasen innan något konto skapas.
           if (!['owner', 'admin'].includes(s.actor.role)) throw new AppError(403, 'Din roll har inte behörighet till den här funktionen.');
+          if (!['admin', 'staff'].includes(input.role)) throw new AppError(400, 'Välj en giltig roll.');
           if (input.role === 'admin' && s.actor.role !== 'owner') throw new AppError(403, 'Bara ägaren kan lägga till administratörer.');
+          if (input.title !== undefined && typeof input.title !== 'string') throw new AppError(400, 'Titeln är ogiltig.');
           const email = String(input.email || '').trim().toLowerCase(), name = String(input.name || '').trim();
           if (!/^[^\s@]+@[^\s@]+\.[a-z]{2,}$/i.test(email) || name.length < 2) throw new AppError(400, 'Skriv namn och en giltig e-postadress.');
           const password = String(input.password || '');
           if (password.length < 10) throw new AppError(400, 'Det tillfälliga lösenordet behöver minst 10 tecken.');
-          const user = await auth.createUser(email, password, name);
-          return reply(await rpc('api_admin_staff', { actor, action: 'create', userId: user.id || user.user?.id, email, name, title: input.title || '', role: input.role }));
+          const user = await auth.createUser(email, password, name), userId = user.id || user.user?.id;
+          try { return reply(await rpc('api_admin_staff', { actor, action: 'create', userId, email, name, title: input.title || '', role: input.role })); }
+          catch (error) { await auth.deleteUser(userId); throw error; } // inget halvfärdigt konto blir kvar
         }
         if (input.action === 'password_reset') {
           const password = String(input.password || '');

@@ -53,7 +53,7 @@ export function createFakeAuth() {
   const uuid = () => `00000000-0000-4000-8000-${String(++n).padStart(12, '0')}`;
   return {
     users,
-    addUser(email, password, name = '') { const user = { id: uuid(), email, password, user_metadata: { name } }; users.set(email, user); return user; },
+    addUser(email, password, name = '') { const user = { id: uuid(), email, password, email_confirmed_at: '2026-10-01T00:00:00Z', user_metadata: { name } }; users.set(email, user); return user; },
     tokenFor(email) { const token = 'tok-' + email; tokens.set(token, users.get(email)); return token; },
     async login(email, password) {
       const user = users.get(email);
@@ -69,6 +69,7 @@ export function createFakeAuth() {
       if (users.has(email)) throw new AppError(409, 'Det finns redan ett konto med den e-postadressen.');
       return this.addUser(email, password, name);
     },
+    async deleteUser(id) { for (const [k, u] of users) if (u.id === id) users.delete(k); },
     async setPassword(id, password) { for (const u of users.values()) if (u.id === id) u.password = password; },
   };
 }

@@ -54,11 +54,12 @@ export function createAuth({ url, anonKey, serviceKey, fetcher = fetch }) {
     async user(accessToken) {
       ensure();
       const response = await fetcher(`${base}/user`, { headers: { apikey: anonKey, Authorization: `Bearer ${accessToken}` } });
+      if (response.status >= 500) throw new AppError(503, 'Inloggningen svarar inte just nu. Försök igen om en stund.');
       return response.ok ? readJson(response) : null;
     },
     async logout(accessToken) {
       if (!url || !anonKey || !accessToken) return;
-      await fetcher(`${base}/logout`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${accessToken}` } }).catch(() => {});
+      await fetcher(`${base}/logout?scope=local`, { method: 'POST', headers: { apikey: anonKey, Authorization: `Bearer ${accessToken}` } }).catch(() => {});
     },
     async changeOwnPassword(accessToken, password) {
       ensure();
@@ -76,6 +77,10 @@ export function createAuth({ url, anonKey, serviceKey, fetcher = fetch }) {
         throw new AppError(400, 'Kontot kunde inte skapas. Kontrollera e-postadressen.');
       }
       return body;
+    },
+    async deleteUser(userId) {
+      if (!serviceKey || !userId) return;
+      await fetcher(`${base}/admin/users/${encodeURIComponent(userId)}`, { method: 'DELETE', headers: { ...headers(serviceKey), Authorization: `Bearer ${serviceKey}` } }).catch(() => {});
     },
     async setPassword(userId, password) {
       if (!serviceKey) throw new AppError(503, 'Servernyckeln saknas.');

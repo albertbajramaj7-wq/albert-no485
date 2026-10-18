@@ -418,7 +418,12 @@ begin
   perform _lock_day(v_date);
 
   select * into v_old from bookings where request_key = v_key;
-  if found then
+  -- Skydd mot massbokningar: högst 3 aktiva webbokningar per telefon eller e-post och dag.
+  if v_old.id is null and not v_staff and (select count(*) from bookings where date = v_date and source = 'web' and status <> 'cancelled'
+      and (email = v_email or regexp_replace(phone, '\D', '', 'g') = regexp_replace(v_phone, '\D', '', 'g'))) >= 3 then
+    perform _fail(409, 'Du har redan flera bokningar den här dagen. Ring oss på 0340–827 75 om du behöver fler.');
+  end if;
+  if v_old.id is not null then
     if v_old.date <> v_date or v_old.count <> v_count or v_old.mode <> v_mode or v_old.guests <> v_guests
        or v_old.email <> v_email or v_old.phone <> v_phone or _time_text(v_old.ready_min) <> (p ->> 'time') then
       perform _fail(409, 'Referensen hör redan till en annan bokning.');
@@ -462,7 +467,8 @@ begin
     return to_jsonb(v);
   end if;
   -- Första inloggningen med ägarens e-post skapar ägarkontot.
-  if v_owner <> '' and v_email = v_owner and not exists (select 1 from staff where role = 'owner') then
+  if v_owner <> '' and v_email = v_owner and coalesce((p ->> 'emailConfirmed')::boolean, false)
+     and not exists (select 1 from staff where role = 'owner') then
     insert into staff (user_id, email, name, title, role) values (v_user, v_email, coalesce(nullif(p ->> 'name', ''), 'Albert'), 'Ägare', 'owner')
       returning * into v;
     perform _audit(_local_date(now()), v.name, 'staff_owner_bootstrap', v.user_id::text, jsonb_build_object('email', v_email));
@@ -778,7 +784,7 @@ begin
         _text(v_item -> 'name', 2, 80, 'Skriv ett namn.'),
         _text(coalesce(v_item -> 'description', '""'), 0, 300, 'Beskrivningen är för lång.'),
         _int(v_item -> 'price', 0, 10000, 'Skriv ett giltigt pris.'),
-        coalesce((v_item ->> 'active')::boolean, false),
+        case when v_item -> 'active' is null then false else _bool(v_item -> 'active', 'Välj om rätten ska visas.') end,
         coalesce((select max(sort_order) + 10 from menu_items), 10)) returning * into m;
     end if;
     perform _audit(_local_date(now()), a.name, 'menu_saved', m.id::text, jsonb_build_object('name', m.name, 'price', m.price, 'active', m.active));
@@ -813,7 +819,8 @@ begin
   end if;
   a := _actor(p, 'admin');
   if p ->> 'action' = 'save' then
-    select array_agg(x::int) into v_days from jsonb_array_elements_text(v -> 'openWeekdays') x;
+    if jsonb_typeof(v -> 'openWeekdays') is distinct from 'array' then perform _fail(400, 'Välj vilka dagar ni har öppet.'); end if;
+    select array_agg(_int(x, 0, 6, 'Välj vilka dagar ni har öppet.')) into v_days from jsonb_array_elements(v -> 'openWeekdays') x;
     if v_days is null or exists (select 1 from unnest(v_days) d where d not between 0 and 6) then perform _fail(400, 'Välj vilka dagar ni har öppet.'); end if;
     begin
       update settings set
@@ -834,6 +841,7 @@ begin
     perform _audit(_local_date(now()), a.name, 'settings_saved', 'settings', v);
   elsif p ->> 'action' = 'close_date' then
     v_date := _date(p ->> 'date');
+    perform _lock_day(v_date);
     insert into closed_dates (date, reason, created_by)
       values (v_date, coalesce(_text(coalesce(p -> 'reason', '""'), 0, 200, 'Anledningen är för lång.'), ''), a.name)
       on conflict (date) do update set reason = excluded.reason;
@@ -865,14 +873,14 @@ begin
   elsif p ->> 'action' = 'create' then
     a := _actor(p, 'admin');
     v_role := p ->> 'role';
-    if v_role not in ('admin', 'staff') then perform _fail(400, 'Välj en giltig roll.'); end if;
+    if v_role is null or v_role not in ('admin', 'staff') then perform _fail(400, 'Välj en giltig roll.'); end if;
     if v_role = 'admin' and a.role <> 'owner' then perform _fail(403, 'Bara ägaren kan lägga till administratörer.'); end if;
     v_user := _uuid(p -> 'userId', 'Kontot kunde inte skapas.');
     insert into staff (user_id, email, name, title, role) values (v_user,
       lower(_text(p -> 'email', 5, 180, 'Skriv en giltig e-postadress.')),
       _text(p -> 'name', 2, 100, 'Skriv ett namn.'),
       _text(coalesce(p -> 'title', '""'), 0, 60, 'Titeln är för lång.'), v_role)
-    on conflict (user_id) do nothing;
+    on conflict do nothing;
     perform _audit(_local_date(now()), a.name, 'staff_created', v_user::text, jsonb_build_object('name', p ->> 'name', 'role', v_role));
   elsif p ->> 'action' in ('set_role', 'set_active', 'password_reset') then
     a := _actor(p, 'admin');
@@ -883,7 +891,7 @@ begin
     if t.role = 'admin' and a.role <> 'owner' then perform _fail(403, 'Bara ägaren kan ändra administratörer.'); end if;
     if p ->> 'action' = 'set_role' then
       v_role := p ->> 'role';
-      if v_role not in ('admin', 'staff') then perform _fail(400, 'Välj en giltig roll.'); end if;
+      if v_role is null or v_role not in ('admin', 'staff') then perform _fail(400, 'Välj en giltig roll.'); end if;
       if v_role = 'admin' and a.role <> 'owner' then perform _fail(403, 'Bara ägaren kan göra någon till administratör.'); end if;
       update staff set role = v_role, updated_at = now() where user_id = t.user_id;
       perform _audit(_local_date(now()), a.name, 'staff_role', t.user_id::text, jsonb_build_object('name', t.name, 'role', v_role));
@@ -977,4 +985,13 @@ begin
     if exists (select 1 from pg_roles where rolname = 'authenticated') then execute format('revoke all on function %s from authenticated', f.sig); end if;
     if exists (select 1 from pg_roles where rolname = 'service_role') then execute format('grant execute on function %s to service_role', f.sig); end if;
   end loop;
+end $$;
+
+-- Funktioner som skapas i senare migreringar ska inte heller vara öppna för publika roller.
+do $$
+begin
+  if exists (select 1 from pg_roles where rolname = 'anon') then
+    execute 'alter default privileges in schema public revoke execute on functions from public, anon, authenticated';
+    execute 'revoke all on all tables in schema public from anon, authenticated';
+  end if;
 end $$;
