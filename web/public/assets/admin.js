@@ -53,7 +53,7 @@
       const result = await request('day?date=' + encodeURIComponent($('work-date').value));
       if (current !== serial) return;
       data = result; needsRefresh = false; dirty = false;
-      $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['stats', 'menu', 'staff', 'config'].includes(view);
+      $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(view);
       $('logout').hidden = false; $('account-button').hidden = false; $('menu-toggle').hidden = false;
       render();
       if (!silent) note('');
@@ -97,15 +97,17 @@
     if (open) document.querySelector('#admin-tabs [aria-current="page"]')?.focus({ preventScroll: true });
   }
   function switchView(value) {
-    if (!['day', 'phone', 'tasks', 'history', 'stats', 'menu', 'staff', 'config'].includes(value) || (['stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
+    if (!['day', 'phone', 'stock', 'purchase', 'tasks', 'history', 'stats', 'menu', 'staff', 'config'].includes(value) || (['stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
     view = value;
     document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== value);
     document.querySelectorAll('[data-view]').forEach(b => { if (b.dataset.view === value) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', tasks: 'Arbetsuppgifter', history: 'Historik', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
-    const ownPage = ['stats', 'menu', 'staff', 'config'].includes(value);
+    $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', stock: 'Lager', purchase: 'Inköp', tasks: 'Arbetsuppgifter', history: 'Historik', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
+    const ownPage = ['stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(value);
     $('day-controls').hidden = ownPage; $('day-label').hidden = ownPage;
     note('');
     if (value === 'phone') loadPhone();
+    if (value === 'stock') loadStock();
+    if (value === 'purchase') loadPurchase();
     if (value === 'stats') loadStats();
     if (value === 'menu') loadMenu();
     if (value === 'staff') loadStaff();
@@ -331,6 +333,171 @@
     $('ph-submit').disabled = !phSlot || busy;
   }
 
+  // ---------- Lager ----------
+  let stock, orders, stockDirty = {};
+  const num = v => Number(v).toLocaleString('sv-SE', { maximumFractionDigits: 2 });
+  const unitCost = v => v === null || v === undefined ? '' : num(v) + ' kr';
+  async function loadStock() { const r = await adminCall('stock'); if (r) { stock = r; stockDirty = {}; renderStock(); } }
+  function itemFields(form, item = {}, isNew) {
+    form.replaceChildren();
+    const field = (label, input, cls) => { const d = el('div', undefined, cls), l = el('label', label); input.id = 'si-' + label.replace(/\W/g, '') + '-' + (item.id || 'new'); l.htmlFor = input.id; d.append(l, input); form.append(d); return input; };
+    const inp = (type, value, attrs = {}) => { const i = el('input'); i.type = type; if (value !== undefined && value !== null) i.value = value; Object.assign(i, attrs); return i; };
+    const name = field('Vara', inp('text', item.name, { required: true, minLength: 2, maxLength: 80 }), 'task-title-field');
+    const category = field('Kategori', inp('text', item.category || 'Råvaror', { maxLength: 40 }));
+    const unit = field('Enhet', inp('text', item.unit || 'st', { maxLength: 12, placeholder: 'kg, st, burk' }));
+    const sup = el('select'); sup.append(Object.assign(el('option', 'Ingen'), { value: '' }), ...stock.suppliers.filter(x => x.active).map(x => Object.assign(el('option', x.name), { value: x.id, selected: x.id === item.supplierId })));
+    field('Leverantör', sup);
+    const min = field('Miniminivå', inp('number', item.minLevel ?? 0, { min: 0, step: 'any', required: true }));
+    const oq = field('Beställ normalt', inp('number', item.orderQty ?? 0, { min: 0, step: 'any' }));
+    const cost = field('Pris per enhet (kr)', inp('number', item.unitCost ?? '', { min: 0, step: 'any' }));
+    const onHand = isNew ? field('I lager nu', inp('number', 0, { min: 0, step: 'any' })) : null;
+    let active = null;
+    if (!isNew) { const l = el('label', undefined, 'admin-checkbox'); active = el('input'); active.type = 'checkbox'; active.checked = item.active !== false; l.append(active, document.createTextNode('Aktiv')); form.append(l); }
+    const save = el('button', isNew ? 'Lägg till' : 'Spara', 'admin-primary'); save.type = 'submit'; form.append(save);
+    form.onsubmit = async event => {
+      event.preventDefault(); if (!form.reportValidity()) return;
+      const payload = { id: item.id || null, name: name.value, category: category.value || 'Råvaror', unit: unit.value || 'st', supplierId: sup.value || null, minLevel: Number(min.value), orderQty: Number(oq.value || 0), unitCost: cost.value === '' ? null : Number(cost.value) };
+      if (isNew) payload.onHand = Number(onHand.value || 0); else payload.active = active.checked;
+      const r = await adminCall('stock', { action: 'save_item', item: payload }, isNew ? name.value + ' är tillagd.' : 'Varan är sparad.');
+      if (r) { stock = r; renderStock(); }
+    };
+  }
+  function renderStock() {
+    const admin = stock.isAdmin, q = $('stock-search').value.trim().toLowerCase(), only = $('stock-filter').value === 'low';
+    $('stock-add-wrap').hidden = !admin;
+    if (admin && !$('stock-new-form').children.length) itemFields($('stock-new-form'), {}, true);
+    const root = $('stock-list'); root.replaceChildren();
+    const rows = stock.items.filter(i => (!only || i.low) && i.name.toLowerCase().includes(q));
+    if (!rows.length) root.append(el('p', only ? 'Inget ligger under miniminivån just nu.' : 'Inga varor hittades.', 'empty-state'));
+    let cat = null, group;
+    rows.forEach(i => {
+      if (i.category !== cat) { cat = i.category; root.append(el('h3', cat, 'ph-group')); group = el('div', undefined, 'stock-group'); root.append(group); }
+      const row = el('article', undefined, 'stock-row' + (i.low ? ' low' : '') + (i.active ? '' : ' inactive'));
+      const info = el('div', undefined, 'stock-info'); info.append(el('strong', i.name));
+      info.append(el('small', ['Min ' + num(i.minLevel) + ' ' + i.unit, i.supplierName, admin && i.unitCost !== null ? unitCost(i.unitCost) + '/' + i.unit : '', i.countedAt ? 'Räknad ' + short(new Date(i.countedAt).toISOString().slice(0, 10)) + (i.countedBy ? ' av ' + i.countedBy : '') : 'Aldrig räknad'].filter(Boolean).join(' · ')));
+      const status = el('div', undefined, 'stock-status');
+      if (!i.active) status.append(el('span', 'Inaktiv', 'pill-tag'));
+      else if (i.onOrder > 0) status.append(el('span', 'Beställd ' + num(i.onOrder), 'pill-tag ordered'));
+      else if (i.low) status.append(el('span', 'Beställ', 'pill-tag low'));
+      const count = el('div', undefined, 'stock-count');
+      const now = el('span', num(i.onHand) + ' ' + i.unit, 'stock-now');
+      const input = el('input'); input.type = 'number'; input.min = 0; input.step = 'any'; input.inputMode = 'decimal'; input.placeholder = 'Antal'; input.id = 'count-' + i.id; input.setAttribute('aria-label', 'Nytt antal ' + i.name);
+      if (stockDirty[i.id] !== undefined) input.value = stockDirty[i.id];
+      input.addEventListener('input', () => { if (input.value === '') delete stockDirty[i.id]; else stockDirty[i.id] = input.value; $('stock-save').disabled = !Object.keys(stockDirty).length; $('stock-save').textContent = Object.keys(stockDirty).length ? 'Spara inventering (' + Object.keys(stockDirty).length + ')' : 'Spara inventering'; });
+      input.disabled = !i.active;
+      count.append(now, input);
+      row.append(info, status, count);
+      if (admin) { const d = el('details', undefined, 'stock-edit'), sm = el('summary', 'Ändra'), f = el('form', undefined, 'task-form stock-form'); d.append(sm, f); d.addEventListener('toggle', () => { if (d.open && !f.children.length) itemFields(f, i, false); }, { once: false }); row.append(d); }
+      group.append(row);
+    });
+    $('stock-save').disabled = !Object.keys(stockDirty).length;
+  }
+
+  // ---------- Inköp ----------
+  const poLabels = { draft: 'Utkast', sent: 'Skickad', received: 'Mottagen', cancelled: 'Makulerad' };
+  async function loadPurchase() { const r = await adminCall('purchase'); if (r) { orders = r.orders; stock = r.stock; renderPurchase(); } }
+  function shopRows() {
+    const low = stock.items.filter(i => i.low && i.onOrder <= 0), groups = {};
+    low.forEach(i => { const k = i.supplierName || 'Utan leverantör'; (groups[k] = groups[k] || []).push(i); });
+    return groups;
+  }
+  const suggest = i => Math.max(i.orderQty > 0 ? i.orderQty : i.minLevel * 2 - i.onHand, 1);
+  function renderPurchase() {
+    const admin = stock.isAdmin, groups = shopRows(), shop = $('shop-list'); shop.replaceChildren();
+    $('shop-create').hidden = !admin || !Object.keys(groups).length; $('supplier-card').hidden = !admin;
+    if (!Object.keys(groups).length) shop.append(el('p', 'Inget behöver beställas just nu.', 'empty-state'));
+    for (const [sup, items] of Object.entries(groups)) {
+      shop.append(el('h3', sup, 'ph-group'));
+      const t = el('table', undefined, 'data-table'), h = el('tr'); ['Vara', 'I lager', 'Min', 'Förslag'].forEach(x => h.append(el('th', x))); t.append(h);
+      items.forEach(i => { const r = el('tr'); [i.name, num(i.onHand) + ' ' + i.unit, num(i.minLevel), num(suggest(i)) + ' ' + i.unit].forEach((x, n) => r.append(el('td', x, n ? 'num' : ''))); t.append(r); });
+      const w = el('div', undefined, 'table-scroll'); w.append(t); shop.append(w);
+    }
+    const root = $('po-list'); root.replaceChildren();
+    if (!orders.length) root.append(el('p', admin ? 'Inga beställningar ännu. Tryck Skapa beställningar när något ligger på inköpslistan.' : 'Inga beställningar att ta emot just nu.', 'empty-state'));
+    orders.forEach(o => root.append(orderCard(o, admin)));
+    if (admin) renderSuppliers();
+  }
+  function orderCard(o, admin) {
+    const card = el('article', undefined, 'admin-card po-card ' + o.status);
+    const head = el('div', undefined, 'section-heading');
+    const title = el('div'); title.append(el('h3', 'Beställning ' + o.number + ' · ' + o.supplierName), el('small', [poLabels[o.status], o.sentAt ? 'skickad ' + short(o.sentAt.slice(0, 10)) + ' av ' + o.sentBy : 'skapad ' + short(o.createdAt.slice(0, 10)), o.receivedAt ? 'mottagen ' + short(o.receivedAt.slice(0, 10)) + ' av ' + o.receivedBy : ''].filter(Boolean).join(' · '), 'muted'));
+    head.append(title, el('span', poLabels[o.status], 'pill-tag ' + o.status)); card.append(head);
+    const t = el('table', undefined, 'data-table'), h = el('tr');
+    const cols = ['Vara', 'Antal'].concat(o.status === 'sent' ? ['Kom'] : o.status === 'received' ? ['Mottaget'] : []).concat(admin ? ['Pris'] : []);
+    cols.forEach(x => h.append(el('th', x))); t.append(h);
+    const inputs = {};
+    o.lines.forEach(l => {
+      const r = el('tr'); r.append(el('td', l.name));
+      const q = el('td', undefined, 'num');
+      if (o.status === 'draft' && admin) { const i = el('input'); i.type = 'number'; i.min = 0.01; i.step = 'any'; i.value = l.qty; i.className = 'qty-input'; i.setAttribute('aria-label', 'Antal ' + l.name); inputs[l.id] = i; q.append(i, document.createTextNode(' ' + l.unit)); }
+      else q.textContent = num(l.qty) + ' ' + l.unit;
+      r.append(q);
+      if (o.status === 'sent') { const c = el('td', undefined, 'num'), i = el('input'); i.type = 'number'; i.min = 0; i.step = 'any'; i.value = l.qty; i.className = 'qty-input'; i.setAttribute('aria-label', 'Mottaget ' + l.name); inputs[l.id] = i; c.append(i); r.append(c); }
+      if (o.status === 'received') r.append(el('td', num(l.receivedQty ?? 0) + ' ' + l.unit, 'num'));
+      if (admin) r.append(el('td', l.unitCost === null || l.unitCost === undefined ? '–' : unitCost(l.unitCost * l.qty), 'num'));
+      t.append(r);
+    });
+    const w = el('div', undefined, 'table-scroll'); w.append(t); card.append(w);
+    if (admin && o.lines.some(l => l.unitCost !== null && l.unitCost !== undefined)) card.append(el('p', 'Uppskattad kostnad: ' + unitCost(o.lines.reduce((n, l) => n + (l.unitCost || 0) * l.qty, 0)), 'muted'));
+    const acts = el('div', undefined, 'booking-actions-list po-actions');
+    const run = async (body, msg) => { const r = await adminCall('purchase', { id: o.id, ...body }, msg); if (r) { orders = r.orders; stock = r.stock; renderPurchase(); } };
+    acts.append(button('Skriv ut / PDF', 'secondary-button', () => printOrder(o)));
+    if (o.status === 'draft' && admin) {
+      acts.append(button('Spara antal', 'secondary-button', () => run({ action: 'save_lines', lines: Object.entries(inputs).map(([id, i]) => ({ id, qty: Number(i.value) })) }, 'Antalen är sparade.')));
+      acts.append(button('Skicka via mejl', 'admin-primary', async () => {
+        // Mejlappen öppnas direkt vid trycket (krävs på iPad), med de antal som står i rutorna just nu.
+        const lines = Object.entries(inputs).map(([id, i]) => ({ id, qty: Number(i.value) }));
+        const current = { ...o, lines: o.lines.map(l => ({ ...l, qty: Number(inputs[l.id]?.value || l.qty) })) };
+        location.href = 'mailto:' + encodeURIComponent(o.supplierEmail || '') + '?subject=' + encodeURIComponent('Beställning ' + o.number + ' från Albert NO.485') + '&body=' + encodeURIComponent(orderText(current));
+        await run({ action: 'save_lines', lines });
+        await run({ action: 'send' }, 'Beställningen är markerad som skickad. Kontrollera att mejlet gick iväg i mejlappen.');
+      }));
+      acts.append(button('Markera skickad', 'text-button', () => run({ action: 'send' }, 'Beställningen är markerad som skickad.')));
+    }
+    if (o.status === 'sent') acts.append(button('Registrera leverans', 'admin-primary', () => run({ action: 'receive', lines: Object.entries(inputs).map(([id, i]) => ({ id, receivedQty: Number(i.value || 0) })) }, 'Leveransen är registrerad och lagret uppdaterat.')));
+    if (admin && ['draft', 'sent'].includes(o.status)) acts.append(button('Makulera', 'text-button', () => run({ action: 'cancel' }, 'Beställningen är makulerad.')));
+    card.append(acts);
+    return card;
+  }
+  function orderText(o) {
+    return ['Hej' + (o.supplierContact ? ' ' + o.supplierContact : '') + '!', '', 'Vi vill beställa följande till Albert NO.485:', '', ...o.lines.map(l => '- ' + num(l.qty) + ' ' + l.unit + ' ' + l.name), '', o.note || '', 'Leverans till Pilgatan 3, Varberg.', 'Beställningsnummer: ' + o.number, '', 'Tack!', 'Albert NO.485', '0340-827 75'].join('\n');
+  }
+  function printDoc(title, body) {
+    const w = window.open('', '_blank');
+    if (!w) { note('Utskriften blockerades. Tillåt popup-fönster för sidan och försök igen.'); return; }
+    w.document.write('<!doctype html><html lang="sv"><head><meta charset="utf-8"><title>' + title + '</title><style>body{font:14px/1.5 system-ui,Arial,sans-serif;color:#2a1f1b;margin:32px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:22px 0 8px}p{margin:0 0 12px;color:#6b605a}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #ddd}th{font-size:12px;color:#6b605a}td.n,th.n{text-align:right}td:first-child,th:first-child{width:28px}.box{display:inline-block;width:14px;height:14px;border:1px solid #2a1f1b;vertical-align:middle}</style></head><body>' + body + '</body></html>');
+    w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
+  }
+  const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+  function printShopping() {
+    const groups = shopRows(), when = readable(today());
+    let body = '<h1>Inköpslista – Albert NO.485</h1><p>' + esc(when) + '</p>';
+    if (!Object.keys(groups).length) body += '<p>Inget behöver beställas.</p>';
+    for (const [sup, items] of Object.entries(groups)) body += '<h2>' + esc(sup) + '</h2><table><tr><th></th><th>Vara</th><th class="n">I lager</th><th class="n">Min</th><th class="n">Beställ</th></tr>' + items.map(i => '<tr><td><span class="box"></span></td><td>' + esc(i.name) + '</td><td class="n">' + esc(num(i.onHand)) + ' ' + esc(i.unit) + '</td><td class="n">' + esc(num(i.minLevel)) + '</td><td class="n">' + esc(num(suggest(i))) + ' ' + esc(i.unit) + '</td></tr>').join('') + '</table>';
+    printDoc('Inköpslista', body);
+  }
+  function printOrder(o) {
+    printDoc('Beställning ' + o.number, '<h1>Beställning ' + o.number + '</h1><p>Albert NO.485 · Pilgatan 3, Varberg · 0340-827 75</p><p>Leverantör: ' + esc(o.supplierName) + (o.supplierEmail ? ' · ' + esc(o.supplierEmail) : '') + '<br>Status: ' + poLabels[o.status] + ' · ' + esc(readable(o.createdAt.slice(0, 10))) + '</p><table><tr><th>Vara</th><th class="n">Antal</th>' + (o.status === 'received' ? '<th class="n">Mottaget</th>' : '') + '</tr>' + o.lines.map(l => '<tr><td>' + esc(l.name) + '</td><td class="n">' + esc(num(l.qty)) + ' ' + esc(l.unit) + '</td>' + (o.status === 'received' ? '<td class="n">' + esc(num(l.receivedQty ?? 0)) + '</td>' : '') + '</tr>').join('') + '</table>' + (o.note ? '<p>' + esc(o.note) + '</p>' : ''));
+  }
+  function supplierForm(form, s = {}) {
+    form.replaceChildren();
+    const f = (label, value, attrs = {}) => { const d = el('div'), l = el('label', label), i = el('input'); Object.assign(i, attrs); i.value = value || ''; i.id = 'sup-' + label.replace(/\W/g, '') + '-' + (s.id || 'new'); l.htmlFor = i.id; d.append(l, i); form.append(d); return i; };
+    const name = f('Namn', s.name, { required: true, minLength: 2, maxLength: 80 }), contact = f('Kontaktperson', s.contact), email = f('E-post', s.email, { type: 'email' }), phone = f('Telefon', s.phone, { type: 'tel' });
+    let active = null; if (s.id) { const l = el('label', undefined, 'admin-checkbox'); active = el('input'); active.type = 'checkbox'; active.checked = s.active !== false; l.append(active, document.createTextNode('Aktiv')); form.append(l); }
+    const b = el('button', s.id ? 'Spara' : 'Lägg till', 'admin-primary'); b.type = 'submit'; form.append(b);
+    form.onsubmit = async e => { e.preventDefault(); if (!form.reportValidity()) return; const r = await adminCall('stock', { action: 'save_supplier', supplier: { id: s.id || null, name: name.value, contact: contact.value, email: email.value, phone: phone.value, ...(s.id ? { active: active.checked } : {}) } }, 'Leverantören är sparad.'); if (r) { stock = r; renderPurchase(); } };
+  }
+  function renderSuppliers() {
+    const root = $('supplier-list'); root.replaceChildren();
+    if (!stock.suppliers.length) root.append(el('p', 'Inga leverantörer ännu.', 'empty-state'));
+    stock.suppliers.forEach(s => {
+      const row = el('div', undefined, 'waste-row'), text = el('div'); text.append(el('strong', s.name + (s.active ? '' : ' (inaktiv)')), el('small', [s.contact, s.email, s.phone].filter(Boolean).join(' · ') || 'Inga kontaktuppgifter'));
+      const d = el('details', undefined, 'stock-edit'), sm = el('summary', 'Ändra'), f = el('form', undefined, 'task-form'); d.append(sm, f); d.addEventListener('toggle', () => { if (d.open && !f.children.length) supplierForm(f, s); });
+      row.append(text, d); root.append(row);
+    });
+    if (!$('supplier-new-form').children.length) supplierForm($('supplier-new-form'));
+  }
+
   // ---------- Statistik ----------
   async function loadStats() {
     const to = today(), from = new Date(Date.parse(to + 'T12:00:00Z') - (statsDays - 1) * 864e5).toISOString().slice(0, 10);
@@ -490,6 +657,15 @@
     finally { busy = false; }
     await load(true);
   });
+  $('stock-search').addEventListener('input', () => stock && renderStock()); $('stock-filter').addEventListener('change', () => stock && renderStock());
+  $('stock-save').addEventListener('click', async () => {
+    const counts = Object.entries(stockDirty).map(([id, v]) => ({ id, qty: Number(String(v).replace(',', '.')) }));
+    if (!counts.length) return;
+    const r = await adminCall('stock', { action: 'count', counts }, 'Inventeringen är sparad (' + counts.length + (counts.length === 1 ? ' vara).' : ' varor).'));
+    if (r) { stock = r; stockDirty = {}; $('stock-save').textContent = 'Spara inventering'; renderStock(); }
+  });
+  $('shop-print').addEventListener('click', () => { if (stock) printShopping(); });
+  $('shop-create').addEventListener('click', async () => { const r = await adminCall('purchase', { action: 'create_from_low' }, 'Beställningar är skapade per leverantör. Kontrollera antalen och skicka.'); if (r) { orders = r.orders; stock = r.stock; renderPurchase(); } });
   $('menu-add').addEventListener('click', () => { if (menu) { renderMenu(menuForm({ active: false, category: 'pizza' })); $('menu-list').querySelector('input')?.focus(); } });
   $('staff-form').addEventListener('submit', async event => {
     event.preventDefault(); if (!event.target.reportValidity()) return;
@@ -526,7 +702,7 @@
     try { await http('/api/auth/password', { password: $('new-password').value }); $('account-dialog').close(); note('Ditt lösenord är bytt.', true); }
     catch (error) { $('account-description').textContent = error.message; }
   });
-  setInterval(() => { if (data && view !== 'config' && view !== 'menu' && view !== 'staff' && !busy && !fetching && !dirty && !needsRefresh && !document.hidden && !document.querySelector('dialog[open]') && !document.querySelector('.task-edit[open]') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) load(true); }, 30000);
+  setInterval(() => { if (data && view !== 'config' && view !== 'menu' && view !== 'staff' && view !== 'stock' && view !== 'purchase' && !busy && !fetching && !dirty && !needsRefresh && !document.hidden && !document.querySelector('dialog[open]') && !document.querySelector('.task-edit[open]') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) load(true); }, 30000);
   switchView(view);
   load();
 })();

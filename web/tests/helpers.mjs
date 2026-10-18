@@ -1,12 +1,14 @@
 // Testmiljö: en riktig Postgres-databas (lokalt) med migreringen, och en låtsas-inloggning.
 // Kör: PGHOST=... PGPORT=... PGUSER=... npm test
 import { execFileSync, spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { createApp } from '../lib/app.js';
 import { AppError } from '../lib/supabase.js';
 
-const migration = fileURLToPath(new URL('../supabase/migrations/0001_albert_core.sql', import.meta.url));
+const migrationsDir = fileURLToPath(new URL('../supabase/migrations/', import.meta.url));
+const migrations = readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort().map(f => migrationsDir + f);
+const migration = migrations[0];
 const psqlArgs = db => ['-X', '-q', '-At', '-v', 'ON_ERROR_STOP=1', '-d', db];
 
 export function createDatabase() {
@@ -15,7 +17,7 @@ export function createDatabase() {
   for (const role of ['anon', 'authenticated', 'service_role']) {
     try { execFileSync('psql', [...psqlArgs('postgres'), '-c', `create role ${role}`], { stdio: 'ignore' }); } catch { /* finns redan */ }
   }
-  execFileSync('psql', [...psqlArgs(name), '-f', migration]);
+  for (const file of migrations) execFileSync('psql', [...psqlArgs(name), '-f', file]);
   return name;
 }
 

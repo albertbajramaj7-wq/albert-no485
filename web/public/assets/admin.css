@@ -147,3 +147,24 @@
 .ph-form{display:grid;gap:6px}.ph-form label{font-size:13px;color:var(--muted);margin-top:6px}.ph-form input{width:100%}.ph-form button{margin-top:14px;width:100%}
 @media (max-width:900px){.phone-layout{grid-template-columns:1fr}.phone-form-card{position:static}}
 .admin-app .admin-primary,.admin-app .danger-button,.admin-app .menu-toggle{color:#fff}
+/* Lager och inköp */
+.stock-group{display:grid;gap:8px}
+.stock-row{display:grid;grid-template-columns:minmax(0,1fr) auto 230px;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 18px}
+.stock-row.low{border-color:#e2bfb2;background:#fdf6f2}
+.stock-row.inactive{opacity:.55}
+.stock-info strong{display:block;font-size:16px}.stock-info small{display:block;font-size:12px;color:var(--muted)}
+.stock-count{display:flex;align-items:center;gap:10px;justify-content:flex-end}
+.stock-now{font-weight:700;font-size:16px;white-space:nowrap;font-variant-numeric:tabular-nums;min-width:70px;text-align:right}
+.stock-count input{width:110px;min-height:44px}
+.stock-edit{grid-column:1/-1}.stock-edit>summary{font-size:13px;color:var(--g-700);cursor:pointer;width:fit-content;font-weight:600}
+.stock-form{margin-top:10px}
+.stock-add{margin-top:18px}
+.pill-tag{display:inline-block;font-size:11px;font-weight:700;border-radius:20px;padding:4px 10px;background:var(--soft);color:var(--muted);white-space:nowrap}
+.pill-tag.low{background:#f6ddd3;color:#9a3d2a}.pill-tag.ordered,.pill-tag.sent{background:#e7e1f0;color:#5a4a7a}.pill-tag.draft{background:var(--g-100);color:var(--g-900)}.pill-tag.received{background:#e2ecdf;color:#3e6b46}.pill-tag.cancelled{background:var(--soft);color:var(--muted)}
+.po-heading{margin:26px 0 12px}
+.po-card{margin-bottom:14px}.po-card h3{font-size:18px;margin:0 0 2px;color:var(--g-900)}.po-card.cancelled,.po-card.received{opacity:.8}
+.po-actions{margin-top:14px;flex-wrap:wrap}
+.qty-input{width:90px;min-height:40px!important;padding:6px 8px!important;text-align:right}
+#supplier-card{margin-top:22px}
+#stock-save[disabled]{opacity:.45}
+@media (max-width:760px){.stock-row{grid-template-columns:minmax(0,1fr) auto}.stock-count{grid-column:1/-1;justify-content:space-between}}

@@ -161,6 +161,8 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         if (!DAY.test(from) || !DAY.test(to)) throw new AppError(400, 'Välj ett giltigt datum.');
         return reply(await rpc('api_admin_stats', { actor, from, to }));
       }
+      if (path === '/api/admin/stock') return reply(await rpc('api_stock', method === 'GET' ? { actor, action: 'list' } : { ...input, actor }));
+      if (path === '/api/admin/purchase') return reply(await rpc('api_purchase', method === 'GET' ? { actor, action: 'list' } : { ...input, actor }));
       if (path === '/api/admin/menu') return reply(await rpc('api_admin_menu', method === 'GET' ? { actor } : { actor, action: 'save', item: input.item }));
       if (path === '/api/admin/config') return reply(await rpc('api_admin_settings', method === 'GET' ? { actor, action: 'get' } : { ...input, actor }));
       if (path === '/api/admin/staff' && method === 'GET') return reply(await rpc('api_admin_staff', { actor, action: 'list' }));

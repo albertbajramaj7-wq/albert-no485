@@ -22,6 +22,8 @@
       <button type="button" data-view="day" aria-current="page">Dagsvy</button>
       <button type="button" data-view="phone">Telefonbokning</button>
       <button type="button" data-view="tasks">Arbetsuppgifter <span id="task-tab-count" class="tab-count"></span></button>
+      <button type="button" data-view="stock">Lager</button>
+      <button type="button" data-view="purchase">Inköp</button>
       <button type="button" data-view="history">Historik</button>
       <hr data-role="admin" hidden>
       <button type="button" data-view="stats" data-role="admin" hidden>Statistik</button>
@@ -123,6 +125,28 @@
           </aside>
         </div>
       </section>
+      <section data-panel="stock" hidden>
+        <div class="section-heading"><div><h2>Inventering</h2><p class="muted">Skriv hur mycket som finns och tryck Spara. Varor under miniminivån hamnar på inköpslistan.</p></div><button type="button" id="stock-save" class="admin-primary" disabled>Spara inventering</button></div>
+        <div class="booking-toolbar"><label class="sr-only" for="stock-search">Sök vara</label><input id="stock-search" type="search" placeholder="Sök vara"><label class="sr-only" for="stock-filter">Visa</label><select id="stock-filter"><option value="all">Alla varor</option><option value="low">Behöver beställas</option></select></div>
+        <div id="stock-list"></div>
+        <details class="add-task stock-add" id="stock-add-wrap" hidden><summary>Lägg till vara</summary><form id="stock-new-form" class="task-form stock-form"></form></details>
+      </section>
+
+      <section data-panel="purchase" hidden>
+        <section class="admin-card">
+          <div class="section-heading"><div><h2>Inköpslista</h2><p class="muted">Allt som ligger på eller under miniminivån.</p></div>
+            <div class="booking-actions-list"><button type="button" id="shop-print" class="secondary-button">Skriv ut / PDF</button><button type="button" id="shop-create" class="admin-primary" hidden>Skapa beställningar</button></div></div>
+          <div id="shop-list"></div>
+        </section>
+        <div class="section-heading po-heading"><h2>Beställningar</h2></div>
+        <div id="po-list"></div>
+        <section class="admin-card" id="supplier-card" hidden>
+          <div class="section-heading"><div><h2>Leverantörer</h2><p class="muted">Används på varor och beställningar.</p></div></div>
+          <div id="supplier-list"></div>
+          <details class="add-task"><summary>Lägg till leverantör</summary><form id="supplier-new-form" class="task-form"></form></details>
+        </section>
+      </section>
+
       <section data-panel="tasks" hidden>
         <div class="section-heading task-heading"><div><h2>Dagens checklistor</h2><p class="muted">Kryssa av när uppgiften är klar. Varje dag har sin egen lista.</p></div><span id="task-count" class="progress-label"></span></div>
         <div class="task-actions"><button type="button" id="start-checklist" class="admin-primary" data-mutation>Lägg till standardlista</button><details class="add-task"><summary>Lägg till egen uppgift</summary><form id="task-form" class="task-form"><div class="task-title-field"><label for="task-title">Vad behöver göras?</label><input id="task-title" required minlength="2" maxlength="180" placeholder="Skriv en uppgift"></div><div><label for="task-category">När?</label><select id="task-category"><option value="opening">Öppning</option><option value="general" selected>Under dagen</option><option value="closing">Stängning</option></select></div><div><label for="task-area">Område</label><select id="task-area"><option value="kitchen">Kök &amp; förberedelser</option><option value="service">Servering &amp; lokal</option><option value="hygiene">Hygien &amp; toalett</option><option value="other" selected>Övrigt</option></select></div><button type="submit" class="admin-primary" data-mutation>Lägg till</button></form></details></div>
