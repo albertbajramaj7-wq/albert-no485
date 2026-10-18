@@ -34,7 +34,7 @@ function stockholmToday(now) {
  * deps: { rpc, auth, env, now?: () => Date, fetcher? }
  * Returnerar en funktion (Request) => Promise<Response>.
  */
-export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher = fetch }) {
+export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher = fetch, diagnose }) {
   const ownerEmail = (env.ADMIN_OWNER_EMAIL || '').trim().toLowerCase();
 
   async function session(request, url) {
@@ -84,6 +84,7 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
       if (path === '/api/availability' && method === 'GET') {
         return json(await rpc('api_availability', { date: q('date'), count: Number(q('count')), mode: q('mode'), guests: Number(q('guests')) }));
       }
+      if (path === '/api/health' && method === 'GET' && diagnose) return json(await diagnose());
       if (path === '/api/menu' && method === 'GET') {
         const response = json(await rpc('api_menu', {}));
         response.headers.set('Cache-Control', 'public, max-age=60');
