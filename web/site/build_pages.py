@@ -1,6 +1,6 @@
 from pathlib import Path
 import re,html,json
-ROOT=Path(__file__).resolve().parents[1];DIST=ROOT/'public';SRC=ROOT/'src'
+ROOT=Path(__file__).resolve().parents[1];DIST=ROOT/'public';SRC=ROOT/'site'
 home=(SRC/'home.html').read_text()
 basecss=re.search(r'<style>(.*?)</style>',home,re.S).group(1)
 (DIST/'assets/site.css').write_text(basecss+'\n'+(SRC/'pages.css').read_text())

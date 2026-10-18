@@ -13,24 +13,38 @@
     <div class="admin-topbar-inner">
       <a href="/" class="admin-brand" aria-label="Albert startsida"><img src="/assets/albert-transparent.png" alt="Albert NO.485" width="1024" height="1024"></a>
       <span class="admin-label">Admin</span>
-      <div class="account-links"><span id="account-name"></span><a href="/" target="_blank" rel="noopener">Hemsidan</a><a href="/signout-with-chatgpt?return_to=%2F" target="_top">Logga ut</a></div>
+      <div class="account-links"><span id="account-name"></span><button type="button" id="account-button" class="topbar-button" hidden>Mitt konto</button><a href="/" target="_blank" rel="noopener">Hemsidan</a><button type="button" id="logout" class="topbar-button" hidden>Logga ut</button></div>
     </div>
   </header>
   <main id="workspace" class="admin-workspace">
     <div class="workspace-heading">
       <div><h1 id="view-title">Dagsvy</h1><p id="day-label"></p></div>
-      <div class="day-controls"><label class="sr-only" for="work-date">Arbetsdag</label><input type="date" id="work-date"><button id="today" type="button">I dag</button><button id="refresh" type="button">Uppdatera</button></div>
+      <div class="day-controls" id="day-controls"><label class="sr-only" for="work-date">Arbetsdag</label><input type="date" id="work-date"><button id="today" type="button">I dag</button><button id="refresh" type="button">Uppdatera</button></div>
     </div>
-    <nav class="admin-tabs" aria-label="Admin">
+    <nav class="admin-tabs" aria-label="Admin" id="admin-tabs" hidden>
       <button type="button" data-view="day" aria-current="page">Dagsvy</button>
       <button type="button" data-view="tasks">Arbetsuppgifter <span id="task-tab-count" class="tab-count"></span></button>
       <button type="button" data-view="history">Historik</button>
+      <button type="button" data-view="stats" data-role="admin" hidden>Statistik</button>
+      <button type="button" data-view="menu" data-role="admin" hidden>Meny</button>
+      <button type="button" data-view="staff" data-role="admin" hidden>Personal</button>
+      <button type="button" data-view="config" data-role="admin" hidden>Inställningar</button>
     </nav>
     <div id="notice" class="admin-notice" role="status" hidden></div>
-    <section id="login-panel" class="login-panel" hidden><h2>Välkommen tillbaka.</h2><p id="login-message">Logga in för att hantera restaurangen.</p><a class="admin-primary" href="/signin-with-chatgpt?return_to=%2Fadmin%2F" target="_top">Logga in med ChatGPT</a></section>
+    <section id="login-panel" class="login-panel" hidden>
+      <h2>Välkommen tillbaka.</h2>
+      <p id="login-message">Logga in för att hantera restaurangen.</p>
+      <form id="login-form" class="login-form" novalidate>
+        <label for="login-email">E-post</label><input id="login-email" type="email" autocomplete="username" required>
+        <label for="login-password">Lösenord</label><input id="login-password" type="password" autocomplete="current-password" required>
+        <button type="submit" class="admin-primary">Logga in</button>
+      </form>
+      <p class="field-help">Har du glömt lösenordet? Be Albert sätta ett nytt tillfälligt lösenord åt dig.</p>
+    </section>
     <div id="loading" class="admin-loading" role="status">Hämtar din arbetsdag.</div>
     <div id="admin-content" hidden>
       <section data-panel="day">
+        <p id="closed-banner" class="admin-notice" hidden></p>
         <div class="day-summary" aria-label="Dagens läge">
           <div><span>Bokade pizzor</span><strong id="stat-booked">—</strong></div>
           <div><span>Kvar att boka</span><strong id="stat-remaining">—</strong></div>
@@ -48,13 +62,20 @@
             <div class="counter-buttons"><button type="button" data-counter="dropin" data-delta="-1" data-mutation aria-label="Minska drop-in med en">−</button><output id="dropin-value" aria-label="Antal sålda drop-in-pizzor">—</output><button type="button" data-counter="dropin" data-delta="1" data-mutation aria-label="Öka drop-in med en">+</button></div>
             <details class="manual-counter"><summary>Ange antal manuellt</summary><form class="counter-form" data-counter-form="dropin"><label class="sr-only" for="dropin-manual">Totalt antal sålda drop-in-pizzor</label><input id="dropin-manual" type="number" min="0" max="10000" required inputmode="numeric"><button type="submit" class="secondary-button" data-mutation>Spara antal</button></form></details>
           </section>
-          <section class="admin-card counter-card">
-            <h2>Förstörda / svinn</h2>
-            <div class="counter-buttons"><button type="button" data-counter="waste" data-delta="-1" data-mutation aria-label="Minska svinn med en">−</button><output id="waste-value" aria-label="Antal förstörda pizzor">—</output><button type="button" data-counter="waste" data-delta="1" data-mutation aria-label="Öka svinn med en">+</button></div>
-            <details class="manual-counter"><summary>Ange antal manuellt</summary><form class="counter-form" data-counter-form="waste"><label class="sr-only" for="waste-manual">Totalt antal förstörda pizzor</label><input id="waste-manual" type="number" min="0" max="10000" required inputmode="numeric"><button type="submit" class="secondary-button" data-mutation>Spara antal</button></form></details>
+          <section class="admin-card counter-card waste-card">
+            <div class="waste-head"><h2>Förstörda / svinn</h2><output id="waste-value" aria-label="Antal förstörda pizzor">—</output></div>
+            <form id="waste-form" class="waste-form">
+              <div><label for="waste-item">Vad</label><select id="waste-item"></select></div>
+              <div><label for="waste-qty">Antal</label><input id="waste-qty" type="number" min="1" max="100" value="1" inputmode="numeric" required></div>
+              <div class="waste-reason"><label for="waste-reason">Orsak</label><select id="waste-reason" required></select></div>
+              <div class="waste-note"><label for="waste-note">Anteckning <span class="muted">(valfritt)</span></label><input id="waste-note" maxlength="250"></div>
+              <button type="submit" class="admin-primary" data-mutation>Registrera svinn</button>
+            </form>
+            <details class="manual-counter"><summary>Dagens registreringar <span id="waste-list-count"></span></summary><div id="waste-list" class="waste-list"></div></details>
+            <details class="manual-counter"><summary>Rätta totalen manuellt</summary><form class="counter-form" data-counter-form="waste"><label class="sr-only" for="waste-manual">Totalt antal förstörda pizzor</label><input id="waste-manual" type="number" min="0" max="10000" required inputmode="numeric"><button type="submit" class="secondary-button" data-mutation>Spara antal</button></form></details>
           </section>
         </div>
-        <details class="day-settings"><summary>Bokningsinställningar</summary><form id="settings-form"><label class="admin-checkbox"><input id="paused" type="checkbox">Pausa nya bokningar den här dagen</label><label class="admin-checkbox"><input id="after-closing" type="checkbox">Tillåt att gäster sitter kvar efter stängning</label><button type="submit" class="secondary-button" data-mutation>Spara inställningar</button><p class="field-help">Gäller valt datum. 8 pizzor per kvart, 31 per timme och 31 sittplatser.</p></form></details>
+        <details class="day-settings" id="day-settings" hidden><summary>Bokningsinställningar för dagen</summary><form id="settings-form"><label class="admin-checkbox"><input id="paused" type="checkbox">Pausa nya bokningar den här dagen</label><label class="admin-checkbox"><input id="after-closing" type="checkbox">Tillåt att gäster sitter kvar efter stängning</label><button type="submit" class="secondary-button" data-mutation>Spara inställningar</button><p class="field-help" id="limits-help"></p></form></details>
         <section class="bookings-section" aria-labelledby="bookings-title">
           <p id="email-setup" class="email-setup" hidden></p>
           <div class="section-heading"><h2 id="bookings-title">Bokningar <span id="booking-count" class="heading-count"></span></h2><a href="/boka-pizza/" class="admin-primary" target="_blank" rel="noopener">Ny bokning</a></div>
@@ -69,8 +90,82 @@
         <div id="task-list" class="task-columns"></div>
       </section>
       <section data-panel="history" hidden><section class="admin-card"><div class="section-heading"><h2>Dagens händelser</h2><span class="muted">Senaste 100</span></div><div id="history-list"></div></section></section>
+
+      <section data-panel="stats" hidden>
+        <div class="section-heading"><div><h2>Försäljning och svinn</h2><p class="muted" id="stats-note">Försäljningen är en uppskattning tills kassasystemet kopplas in.</p></div>
+          <div class="period-buttons" role="group" aria-label="Period"><button type="button" data-period="7" aria-pressed="true">7 dagar</button><button type="button" data-period="30" aria-pressed="false">30 dagar</button><button type="button" data-period="90" aria-pressed="false">90 dagar</button></div></div>
+        <div class="day-summary stats-summary" id="stats-summary"></div>
+        <div class="stats-grid">
+          <section class="admin-card"><h2>Pizzor per dag</h2><p class="muted">Bokade och drop-in. Svinn visas separat.</p><div id="stats-chart" class="stats-chart"></div></section>
+          <section class="admin-card"><h2>Svinn per orsak</h2><div id="stats-waste"></div></section>
+        </div>
+        <section class="admin-card stats-table-card"><div class="section-heading"><h2>Dag för dag</h2><button type="button" id="export-stats" class="text-button">Exportera CSV</button></div><div class="table-scroll"><table class="data-table" id="stats-table"></table></div></section>
+      </section>
+
+      <section data-panel="menu" hidden>
+        <div class="section-heading"><div><h2>Menyn på hemsidan</h2><p class="muted">Ändringar syns på menysidan inom en minut. Rätter döljs i stället för att raderas.</p></div><button type="button" id="menu-add" class="admin-primary">Lägg till rätt</button></div>
+        <div id="menu-list" class="menu-admin-list"></div>
+      </section>
+
+      <section data-panel="staff" hidden>
+        <div class="section-heading"><div><h2>Personal</h2><p class="muted">Personal ser dagsvyn, arbetsuppgifter och historik. Administratörer ser även statistik, meny, personal och inställningar.</p></div></div>
+        <p class="admin-notice bankid-note">BankID är förberett men inte inkopplat. När det kopplas in krävs det för att ändra roller och lösenord.</p>
+        <div id="staff-list"></div>
+        <details class="add-task staff-add"><summary>Lägg till person</summary>
+          <form id="staff-form" class="task-form">
+            <div><label for="staff-name">Namn</label><input id="staff-name" required minlength="2" maxlength="100"></div>
+            <div><label for="staff-email">E-post</label><input id="staff-email" type="email" required></div>
+            <div><label for="staff-title">Titel</label><input id="staff-title" maxlength="60" placeholder="Pizzaiolo, servering …"></div>
+            <div><label for="staff-role">Roll</label><select id="staff-role"><option value="staff">Personal</option><option value="admin">Administratör</option></select></div>
+            <div><label for="staff-password">Tillfälligt lösenord</label><input id="staff-password" minlength="10" required autocomplete="off"></div>
+            <button type="submit" class="admin-primary">Lägg till</button>
+          </form>
+          <p class="field-help">Ge personen lösenordet muntligt eller i ett sms. Hen byter det själv under Mitt konto.</p>
+        </details>
+      </section>
+
+      <section data-panel="config" hidden>
+        <form id="config-form" class="config-form">
+          <section class="admin-card"><h2>Öppettider</h2>
+            <fieldset class="weekday-set"><legend>Öppna dagar</legend><div id="weekday-boxes"></div></fieldset>
+            <div class="config-grid">
+              <div><label for="cfg-lunchFirst">Lunch, första färdigtid</label><input id="cfg-lunchFirst" type="time" step="900" required></div>
+              <div><label for="cfg-lunchLast">Lunch, sista färdigtid</label><input id="cfg-lunchLast" type="time" step="900" required></div>
+              <div><label for="cfg-dinnerFirst">Kväll, första färdigtid</label><input id="cfg-dinnerFirst" type="time" step="900" required></div>
+              <div><label for="cfg-dinnerLast">Kväll, sista färdigtid</label><input id="cfg-dinnerLast" type="time" step="900" required></div>
+            </div>
+            <p class="field-help">Sista färdigtiden är också när sittningen senast ska vara slut, om inte sena sittningar tillåts för dagen.</p>
+          </section>
+          <section class="admin-card"><h2>Kapacitet</h2>
+            <div class="config-grid">
+              <div><label for="cfg-slotCap">Pizzor per kvart</label><input id="cfg-slotCap" type="number" min="1" max="100" required></div>
+              <div><label for="cfg-hourCap">Pizzor per timme</label><input id="cfg-hourCap" type="number" min="1" max="500" required></div>
+              <div><label for="cfg-seats">Sittplatser</label><input id="cfg-seats" type="number" min="0" max="500" required></div>
+              <div><label for="cfg-sittingMin">Sittning (minuter)</label><input id="cfg-sittingMin" type="number" min="15" max="240" required></div>
+              <div><label for="cfg-arrivalMin">Ankomst före färdigtid (minuter)</label><input id="cfg-arrivalMin" type="number" min="0" max="60" required></div>
+              <div><label for="cfg-horizonDays">Boka dagar framåt</label><input id="cfg-horizonDays" type="number" min="1" max="365" required></div>
+              <div><label for="cfg-maxCount">Flest pizzor per bokning</label><input id="cfg-maxCount" type="number" min="1" max="50" required></div>
+              <div><label for="cfg-maxGuests">Flest gäster per bokning</label><input id="cfg-maxGuests" type="number" min="1" max="500" required></div>
+            </div>
+          </section>
+          <section class="admin-card"><h2>Ekonomi</h2>
+            <div class="config-grid">
+              <div><label for="cfg-avgPizzaPrice">Snittpris per pizza (kr)</label><input id="cfg-avgPizzaPrice" type="number" min="0" max="10000" required></div>
+              <div><label for="cfg-wasteCost">Råvarukostnad per pizza (kr)</label><input id="cfg-wasteCost" type="number" min="0" max="10000" required></div>
+            </div>
+            <p class="field-help">Används för uppskattad försäljning och svinnkostnad i statistiken.</p>
+          </section>
+          <div><button type="submit" class="admin-primary">Spara inställningar</button></div>
+        </form>
+        <section class="admin-card closed-card"><h2>Stängda datum</h2><p class="muted">Helgdagar, semester eller privata evenemang. Befintliga bokningar påverkas inte, men inga nya kan göras.</p>
+          <form id="closed-form" class="task-form"><div><label for="closed-date">Datum</label><input id="closed-date" type="date" required></div><div class="task-title-field"><label for="closed-reason">Anledning</label><input id="closed-reason" maxlength="200" placeholder="Till exempel julafton"></div><button type="submit" class="admin-primary">Stäng datumet</button></form>
+          <div id="closed-list"></div>
+        </section>
+      </section>
     </div>
   </main>
   <dialog id="cancel-dialog" class="action-dialog" aria-labelledby="cancel-title"><form id="cancel-form"><h2 id="cancel-title">Avboka bokning</h2><p id="cancel-description"></p><label for="cancel-reason">Anledning</label><textarea id="cancel-reason" minlength="2" maxlength="250" required placeholder="Skriv varför bokningen avbokas."></textarea><div class="dialog-actions"><button type="button" class="secondary-button" id="cancel-close">Tillbaka</button><button type="submit" class="danger-button" data-mutation>Avboka bokningen</button></div></form></dialog>
+  <dialog id="account-dialog" class="action-dialog" aria-labelledby="account-title"><form id="account-form"><h2 id="account-title">Mitt konto</h2><p id="account-description" class="muted"></p><label for="new-password">Nytt lösenord</label><input id="new-password" type="password" minlength="10" required autocomplete="new-password"><p class="field-help">Minst 10 tecken.</p><div class="dialog-actions"><button type="button" class="secondary-button" id="account-close">Stäng</button><button type="submit" class="admin-primary">Byt lösenord</button></div></form></dialog>
+  <dialog id="password-dialog" class="action-dialog" aria-labelledby="password-title"><form id="password-form"><h2 id="password-title">Nytt tillfälligt lösenord</h2><p id="password-description" class="muted"></p><label for="reset-password">Tillfälligt lösenord</label><input id="reset-password" minlength="10" required autocomplete="off"><div class="dialog-actions"><button type="button" class="secondary-button" id="password-close">Tillbaka</button><button type="submit" class="admin-primary">Spara lösenord</button></div></form></dialog>
 </body>
 </html>

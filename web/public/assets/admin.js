@@ -1,31 +1,50 @@
 (() => {
   'use strict';
+  // Grunden (dagsvy, bokningar, arbetsuppgifter, historik) kommer från ChatGPT:s version.
+  // Tillagt: inloggning med e-post, roller, svinn med orsak, statistik, meny, personal och inställningar.
   const $ = id => document.getElementById(id);
   const labels = { confirmed: 'Bokad', checked_in: 'Incheckad', completed: 'Avslutad', cancelled: 'Avbokad' };
-  const actionNames = { booking_created: 'Ny bokning', booking_checkin: 'Gäst incheckad', booking_finish: 'Bokning avslutad', booking_cancel: 'Bokning avbokad', dropin_changed: 'Drop-in ändrat', waste_changed: 'Svinn ändrat', day_settings: 'Dagsinställningar sparade', task_create: 'Arbetsuppgift tillagd', task_update: 'Arbetsuppgift flyttad eller redigerad', task_done: 'Arbetsuppgift ändrad', task_archive: 'Arbetsuppgift borttagen' };
+  const actionNames = { booking_created: 'Ny bokning', booking_checkin: 'Gäst incheckad', booking_undo_checkin: 'Incheckning ångrad', booking_finish: 'Bokning avslutad', booking_cancel: 'Bokning avbokad', dropin_changed: 'Drop-in ändrat', waste_changed: 'Svinn rättat', waste_registered: 'Svinn registrerat', waste_voided: 'Svinn makulerat', day_settings: 'Dagsinställningar sparade', task_create: 'Arbetsuppgift tillagd', task_update: 'Arbetsuppgift flyttad eller redigerad', task_done: 'Arbetsuppgift ändrad', task_archive: 'Arbetsuppgift borttagen', booking_email: 'Bekräftelsemejl', booking_email_requested: 'Bekräftelse begärd', date_closed: 'Datum stängt', date_reopened: 'Datum öppnat igen', settings_saved: 'Inställningar sparade', menu_saved: 'Menyn ändrad', staff_created: 'Personal tillagd', staff_role: 'Roll ändrad', staff_active: 'Personal aktiverad/inaktiverad', staff_password_reset: 'Lösenord återställt', staff_owner_bootstrap: 'Ägarkonto skapat' };
   const phases = { opening: 'Öppning', general: 'Under dagen', closing: 'Stängning' };
   const areas = { kitchen: 'Kök & förberedelser', service: 'Servering & lokal', hygiene: 'Hygien & toalett', other: 'Övrigt' };
   const descriptions = { opening: 'Innan vi öppnar', general: 'Håll ordning under servicen', closing: 'Innan vi går hem' };
+  const reasons = { burnt: 'Bränd', dough: 'Degen sprack', dropped: 'Tappad', wrong_order: 'Fel beställning', complaint: 'Reklamation', other: 'Övrigt' };
+  const roles = { owner: 'Ägare', admin: 'Administratör', staff: 'Personal' };
+  const weekdays = [[1, 'Mån'], [2, 'Tis'], [3, 'Ons'], [4, 'Tor'], [5, 'Fre'], [6, 'Lör'], [0, 'Sön']];
   const mailLabels = { sent: 'Bekräftelsemejl skickat', pending: 'Bekräftelsemejl väntar', sending: 'Mejl behandlas', failed: 'Mejl kunde inte skickas', uncertain: 'Mejlutskicket behöver kontrolleras', blocked: 'Mejl är inte aktiverat', review: 'Kontrollera utskicket i Resend', skipped: 'Mejlutskick stoppat' };
   const mailMessages = { sent: 'Bekräftelsen har skickats till mejltjänsten.', pending: 'Utskicket väntar. Försök igen om en stund.', sending: 'Utskicket behandlas redan. Uppdatera vyn om en stund.', failed: 'Mejltjänsten nekade utskicket. Kontrollera API-nyckel och avsändare.', uncertain: 'Mejltjänstens svar kunde inte bekräftas. Samma utskick kan kontrolleras igen om en stund.', not_configured: 'Mejlutskicken behöver aktiveras med en API-nyckel och avsändare.', review: 'Kontrollera det tidigare utskicket i Resend. Ett nytt mejl skickas inte automatiskt.', skipped: 'Utskicket har stoppats eftersom bokningen inte längre är aktuell.', not_queued: 'Inget mejlutskick finns sparat för bokningen.' };
   let data, fetching = false, busy = false, dirty = false, serial = 0, cancelId, view = 'day', needsRefresh = false, taskPhase = 'all';
+  let statsDays = 7, stats, menu, staff, config, resetUserId;
   const today = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm' }).format(new Date());
   const time = minute => String(Math.floor(minute / 60)).padStart(2, '0') + ':' + String(minute % 60).padStart(2, '0');
+  const minutes = value => { const [h, m] = String(value).split(':').map(Number); return h * 60 + m; };
   const readable = date => new Intl.DateTimeFormat('sv-SE', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(date + 'T12:00:00Z'));
+  const short = date => new Intl.DateTimeFormat('sv-SE', { weekday: 'short', day: 'numeric', month: 'numeric', timeZone: 'UTC' }).format(new Date(date + 'T12:00:00Z'));
+  const kr = n => Math.round(n).toLocaleString('sv-SE') + ' kr';
+  const isAdmin = () => ['owner', 'admin'].includes(data?.actor?.role);
   function el(tag, text, cls) { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node; }
+  function button(text, cls, onClick) { const b = el('button', text, cls); b.type = 'button'; b.addEventListener('click', onClick); return b; }
   function note(message, success = false) { $('notice').textContent = message; $('notice').hidden = !message; $('notice').classList.toggle('success', success); }
   function lock() {
-    document.querySelectorAll('[data-mutation]').forEach(button => { button.disabled = busy || fetching || needsRefresh || (button.dataset.email === 'true' && !data?.emailSetup?.configured) || (!!button.dataset.counter && Number(button.dataset.delta) < 0 && (!data || data.day[button.dataset.counter] === 0)); });
+    document.querySelectorAll('[data-mutation]').forEach(b => { b.disabled = busy || fetching || needsRefresh || (b.dataset.email === 'true' && !data?.emailSetup?.configured) || (!!b.dataset.counter && Number(b.dataset.delta) < 0 && (!data || data.day[b.dataset.counter] === 0)); });
     $('work-date').disabled = busy; $('today').disabled = busy; $('refresh').disabled = busy;
   }
-  async function request(path, body) {
+  async function http(path, body, method) {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
     try {
-      const response = await fetch('/api/admin/' + path, { method: body ? 'POST' : 'GET', headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
-      const result = await response.json();
+      const response = await fetch(path, { method: method || (body ? 'POST' : 'GET'), headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined, credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+      const result = await response.json().catch(() => ({}));
       if (!response.ok) { const error = new Error(result.error || 'Åtgärden kunde inte genomföras.'); error.status = response.status; throw error; }
       return result;
     } finally { clearTimeout(timer); }
+  }
+  const request = (path, body) => http('/api/admin/' + path, body);
+  function showLogin(message) {
+    data = undefined;
+    $('login-panel').hidden = false; $('admin-content').hidden = true; $('admin-tabs').hidden = true; $('day-controls').hidden = true;
+    $('logout').hidden = true; $('account-button').hidden = true; $('account-name').textContent = ''; $('day-label').textContent = '';
+    $('view-title').textContent = 'Logga in'; $('login-message').textContent = message || 'Logga in för att hantera restaurangen.';
+    $('loading').hidden = true; $('login-email').focus();
   }
   async function load(silent = false) {
     const current = ++serial; fetching = true; lock();
@@ -34,14 +53,14 @@
       const result = await request('day?date=' + encodeURIComponent($('work-date').value));
       if (current !== serial) return;
       data = result; needsRefresh = false; dirty = false;
-      $('login-panel').hidden = true; $('admin-content').hidden = false;
+      $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['stats', 'menu', 'staff', 'config'].includes(view);
+      $('logout').hidden = false; $('account-button').hidden = false;
       render();
       if (!silent) note('');
     } catch (error) {
       if (current !== serial) return;
-      if ([401, 403].includes(error.status)) {
-        $('login-panel').hidden = false; $('admin-content').hidden = true; $('login-message').textContent = error.message;
-      } else note('Kunde inte hämta dagen. ' + error.message);
+      if ([401, 403].includes(error.status)) showLogin(error.status === 403 ? error.message : '');
+      else note('Kunde inte hämta dagen. ' + error.message);
     } finally { if (current === serial) { $('loading').hidden = true; fetching = false; } lock(); }
   }
   async function mutate(path, body, message) {
@@ -49,41 +68,55 @@
     const focusId = document.activeElement?.id;
     busy = true; lock(); note('Sparar.');
     try {
-      data = await request(path, body);
+      data = { ...await request(path, body) };
       dirty = false; render();
       if (path === 'email') note(mailMessages[data.emailAction?.status] || 'Utskicket kunde inte verifieras.', data.emailAction?.status === 'sent');
       else note(message, true);
       if (path === 'booking' && body.action === 'cancel') $('cancel-dialog').close();
       return true;
     } catch (error) {
-      if (error.status) {
-        await load(true); note(error.message);
-      } else {
-        needsRefresh = true;
-        note('Ändringen kan ha sparats. Tryck Uppdatera innan du gör fler ändringar.');
-      }
+      if (error.status === 401) { showLogin('Du har loggats ut. Logga in igen.'); return false; }
+      if (error.status) { await load(true); note(error.message); }
+      else { needsRefresh = true; note('Ändringen kan ha sparats. Tryck Uppdatera innan du gör fler ändringar.'); }
       return false;
     } finally { busy = false; lock(); if (focusId?.startsWith('task-done-')) $(focusId)?.focus({ preventScroll: true }); }
   }
+  // Enklare anrop för admins egna sidor (statistik, meny, personal, inställningar).
+  async function adminCall(path, body, message) {
+    if (busy) return null;
+    busy = true; lock(); if (body) note('Sparar.');
+    try { const result = await request(path, body); if (message) note(message, true); else if (body) note(''); return result; }
+    catch (error) { if (error.status === 401) showLogin('Du har loggats ut. Logga in igen.'); else note(error.message); return null; }
+    finally { busy = false; lock(); }
+  }
   function switchView(value) {
-    if (!['day', 'tasks', 'history'].includes(value)) value = 'day';
+    if (!['day', 'tasks', 'history', 'stats', 'menu', 'staff', 'config'].includes(value) || (['stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
     view = value;
     document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== value);
-    document.querySelectorAll('[data-view]').forEach(button => { if (button.dataset.view === value) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current'); });
-    $('view-title').textContent = { day: 'Dagsvy', tasks: 'Arbetsuppgifter', history: 'Historik' }[value];
+    document.querySelectorAll('[data-view]').forEach(b => { if (b.dataset.view === value) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
+    $('view-title').textContent = { day: 'Dagsvy', tasks: 'Arbetsuppgifter', history: 'Historik', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
+    const ownPage = ['stats', 'menu', 'staff', 'config'].includes(value);
+    $('day-controls').hidden = ownPage; $('day-label').hidden = ownPage;
+    note('');
+    if (value === 'stats') loadStats();
+    if (value === 'menu') loadMenu();
+    if (value === 'staff') loadStaff();
+    if (value === 'config') loadConfig();
   }
+
+  // ---------- Bokningar ----------
   function bookingAction(buttonLabel, action, row, cls) {
-    const button = el('button', buttonLabel, cls); button.type = 'button'; button.dataset.mutation = 'true';
-    button.addEventListener('click', () => {
+    const b = el('button', buttonLabel, cls); b.type = 'button'; b.dataset.mutation = 'true';
+    b.addEventListener('click', () => {
       if (action === 'cancel') {
         cancelId = row.id; $('cancel-description').textContent = row.name + ' · ' + time(row.ready_min) + ' · ' + row.count + ' pizzor'; $('cancel-reason').value = ''; $('cancel-dialog').showModal(); $('cancel-reason').focus();
-      } else mutate('booking', { id: row.id, action }, action === 'checkin' ? 'Gästen är incheckad.' : 'Bokningen är avslutad.');
+      } else mutate('booking', { id: row.id, action }, { checkin: 'Gästen är incheckad.', finish: 'Bokningen är avslutad.', undo_checkin: 'Incheckningen är ångrad.' }[action]);
     });
-    return button;
+    return b;
   }
   function renderBookings() {
     if (!data) return;
-    const search = $('search-bookings').value.trim().toLowerCase(), filter = $('status-filter').value;
+    const search = $('search-bookings').value.trim().toLowerCase(), filter = $('status-filter').value, arrival = data.limits.arrival, sitting = data.limits.sitting;
     const rows = data.bookings.filter(b => (filter === 'all' || (filter === 'active' ? ['confirmed', 'checked_in'].includes(b.status) : b.status === filter)) && [b.name, b.phone, b.email, b.id].join(' ').toLowerCase().includes(search));
     $('booking-count').textContent = rows.length + (rows.length === 1 ? ' bokning' : ' bokningar');
     const root = $('booking-list'); root.replaceChildren();
@@ -92,16 +125,17 @@
       const card = el('article', undefined, 'booking-row'), clock = el('div', undefined, 'booking-time');
       clock.append(el('strong', time(row.ready_min)), el('span', labels[row.status], 'booking-status ' + row.status));
       const person = el('div', undefined, 'booking-person'); person.append(el('strong', row.name));
-      const phone = el('a', row.phone); phone.href = 'tel:' + row.phone.replace(/[^+0-9]/g, ''); person.append(phone, el('small', row.email));
+      const phone = el('a', row.phone); phone.href = 'tel:' + row.phone.replace(/[^+0-9]/g, ''); person.append(phone);
+      if (row.email) person.append(el('small', row.email));
       const emailStatus = row.confirmationEmail?.status;
-      person.append(el('small', mailLabels[emailStatus] || 'Inget bekräftelsemejl skickat', 'email-status' + (emailStatus === 'sent' ? ' sent' : '')));
-      const details = el('div', undefined, 'booking-detail'); details.append(el('span', row.count + ' pizzor · ' + (row.mode === 'here' ? row.guests + ' gäster' : 'Ta med')), el('small', 'Ankomst ' + time(row.ready_min - 10)));
-      if (row.mode === 'here') details.append(el('small', 'Sittning ' + time(row.ready_min - 10) + '–' + time(row.ready_min + 50)));
+      if (row.email) person.append(el('small', mailLabels[emailStatus] || 'Inget bekräftelsemejl skickat', 'email-status' + (emailStatus === 'sent' ? ' sent' : '')));
+      const details = el('div', undefined, 'booking-detail'); details.append(el('span', row.count + ' pizzor · ' + (row.mode === 'here' ? row.guests + ' gäster' : 'Ta med')), el('small', 'Ankomst ' + time(row.ready_min - arrival)));
+      if (row.mode === 'here') details.append(el('small', 'Sittning ' + time(row.ready_min - arrival) + '–' + time(row.ready_min - arrival + sitting)));
       const actions = el('div', undefined, 'booking-actions-list');
       if (row.status === 'confirmed') actions.append(bookingAction('Checka in', 'checkin', row, 'admin-primary'));
-      if (row.status === 'checked_in') actions.append(bookingAction('Avsluta besöket', 'finish', row, 'admin-primary'));
+      if (row.status === 'checked_in') actions.append(bookingAction('Avsluta besöket', 'finish', row, 'admin-primary'), bookingAction('Ångra incheckning', 'undo_checkin', row, 'text-button'));
       if (['confirmed', 'checked_in'].includes(row.status)) actions.append(bookingAction('Avboka', 'cancel', row, 'secondary-button'));
-      if (['confirmed', 'checked_in'].includes(row.status) && !['sent', 'review', 'skipped'].includes(emailStatus) && row.date >= today()) {
+      if (row.email && ['confirmed', 'checked_in'].includes(row.status) && !['sent', 'review', 'skipped'].includes(emailStatus) && row.date >= today()) {
         const retry = el('button', emailStatus === 'uncertain' || emailStatus === 'sending' ? 'Kontrollera mejlet' : 'Skicka bekräftelse', 'text-button'); retry.type = 'button'; retry.dataset.mutation = 'true'; retry.dataset.email = 'true';
         retry.addEventListener('click', () => mutate('email', { id: row.id }, '')); actions.append(retry);
       }
@@ -110,6 +144,28 @@
       root.append(card);
     }); lock();
   }
+
+  // ---------- Svinn ----------
+  function renderWaste() {
+    const item = $('waste-item'), keep = item.value;
+    item.replaceChildren(...data.menu.map(m => { const o = el('option', m.name); o.value = m.name; return o; }), ...['Deg (ej bakad)', 'Övrigt'].map(n => { const o = el('option', n); o.value = n; return o; }));
+    if ([...item.options].some(o => o.value === keep)) item.value = keep;
+    if (!$('waste-reason').options.length) $('waste-reason').append(...Object.entries(reasons).map(([k, v]) => { const o = el('option', v); o.value = k; return o; }));
+    const root = $('waste-list'); root.replaceChildren();
+    const active = data.waste.filter(w => !w.voided_at);
+    $('waste-list-count').textContent = data.waste.length ? '(' + active.length + ')' : '';
+    if (!data.waste.length) root.append(el('p', 'Inget svinn registrerat i dag.', 'muted'));
+    data.waste.forEach(w => {
+      const row = el('div', undefined, 'waste-row' + (w.voided_at ? ' voided' : ''));
+      const stamp = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit' }).format(new Date(w.created_at));
+      const text = el('div'); text.append(el('strong', w.qty + ' × ' + w.item), el('small', [stamp, reasons[w.reason] || w.reason, w.actor, w.note, w.voided_at ? 'Makulerad av ' + w.voided_by : ''].filter(Boolean).join(' · ')));
+      row.append(text);
+      if (!w.voided_at) { const b = button('Makulera', 'text-button', () => mutate('waste', { date: data.day.date, action: 'void', id: w.id }, 'Registreringen är makulerad.')); b.dataset.mutation = 'true'; row.append(b); }
+      root.append(row);
+    });
+  }
+
+  // ---------- Arbetsuppgifter (oförändrat) ----------
   function taskEditor(task) {
     const details = el('details', undefined, 'task-edit'), summary = el('summary', 'Ändra uppgift'), form = el('form');
     const title = el('input'); title.id = 'task-edit-title-' + task.id; title.value = task.title; title.required = true; title.minLength = 2; title.maxLength = 180;
@@ -144,7 +200,7 @@
     $('task-count').textContent = done + ' av ' + data.tasks.length + ' klara';
     $('task-tab-count').textContent = data.tasks.length ? done + '/' + data.tasks.length : '';
     $('start-checklist').hidden = data.checklistStarted;
-    document.querySelectorAll('[data-phase]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.phase === taskPhase)));
+    document.querySelectorAll('[data-phase]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.phase === taskPhase)));
     let shown = 0;
     for (const [category, title] of Object.entries(phases)) {
       if (taskPhase !== 'all' && taskPhase !== category) continue;
@@ -175,37 +231,157 @@
     data.history.forEach(item => {
       const row = el('div', undefined, 'history-row'), timestamp = el('time', new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit' }).format(new Date(item.created_at)));
       timestamp.dateTime = item.created_at; const content = el('div'); content.append(el('strong', actionNames[item.action] || item.action));
-      let detail; try { detail = JSON.parse(item.detail); } catch { detail = {}; }
-      const parts = [item.actor === 'guest' ? 'Gästbokning' : item.actor];
-      if (detail.time) parts.push(detail.time); if (detail.count) parts.push(detail.count + ' pizzor'); if (detail.reason) parts.push(detail.reason); if (detail.title) parts.push(detail.title);
-      if (detail.delta) parts.push('Ändring ' + (detail.delta > 0 ? '+' : '') + detail.delta); if (detail.value !== undefined) parts.push('Totalt ' + detail.value);
+      const detail = item.detail || {};
+      const parts = [item.actor === 'guest' ? 'Gästbokning' : item.actor === 'system' ? 'Systemet' : item.actor];
+      if (detail.time) parts.push(detail.time); if (detail.item) parts.push(detail.item); if (detail.count) parts.push(detail.count + (detail.item ? ' st' : ' pizzor'));
+      if (detail.reason) parts.push(reasons[detail.reason] || detail.reason); if (detail.title) parts.push(detail.title); if (detail.name) parts.push(detail.name);
+      if (detail.delta) parts.push('Ändring ' + (detail.delta > 0 ? '+' : '') + detail.delta); if (detail.value !== undefined && detail.value !== null) parts.push('Totalt ' + detail.value);
       if (detail.prepared !== undefined) parts.push(detail.prepared === null ? 'Ingen dagsgräns' : detail.prepared + ' förberedda');
       if (phases[detail.category]) parts.push(phases[detail.category]); if (areas[detail.area]) parts.push(areas[detail.area]);
       if (typeof detail.done === 'boolean') parts.push(detail.done ? 'Klar' : 'Öppnad igen');
+      if (detail.status && item.action === 'booking_email') parts.push(mailLabels[detail.status] || detail.status);
       content.append(el('p', parts.join(' · '))); row.append(timestamp, content); root.append(row);
     });
   }
   function render() {
-    $('account-name').textContent = data.actor.name;
+    $('account-name').textContent = data.actor.name + ' · ' + roles[data.actor.role];
+    document.querySelectorAll('[data-role="admin"]').forEach(b => { b.hidden = !isAdmin(); });
+    $('day-settings').hidden = !isAdmin();
     $('email-setup').hidden = !!data.emailSetup?.configured;
     $('email-setup').textContent = 'Mejlbekräftelser är inte aktiverade ännu. Resend behöver en API-nyckel och en verifierad avsändare. Bokningar sparas som vanligt.';
     $('day-label').textContent = readable(data.day.date);
+    $('closed-banner').hidden = !data.closed; $('closed-banner').textContent = data.closed ? 'Stängt för nya bokningar den här dagen' + (data.closedReason ? ': ' + data.closedReason : '.') : '';
     $('stat-booked').textContent = data.stats.booked;
     $('stat-remaining').textContent = data.stats.remaining === null ? 'Ej satt' : data.stats.remaining;
     $('stock-explanation').textContent = data.day.prepared === null ? 'Ingen dagsgräns satt. Lämna tomt för att ta bort en gräns.' : 'Av ' + data.day.prepared + ' förberedda dras bokningar, drop-in och svinn av.';
-    $('guests-present').textContent = data.stats.guestsPresent; $('booking-open').textContent = data.day.paused ? 'Pausad' : 'Öppen';
-    $('booking-open').classList.toggle('paused', !!data.day.paused);
+    $('guests-present').textContent = data.stats.guestsPresent; $('booking-open').textContent = data.closed ? 'Stängt' : data.day.paused ? 'Pausad' : 'Öppen';
+    $('booking-open').classList.toggle('paused', !!data.day.paused || data.closed);
     $('dropin-value').textContent = data.day.dropin; $('waste-value').textContent = data.day.waste;
     $('dropin-manual').value = data.day.dropin; $('waste-manual').value = data.day.waste;
     $('prepared').value = data.day.prepared === null ? '' : data.day.prepared; $('paused').checked = !!data.day.paused; $('after-closing').checked = !!data.day.allow_after_closing;
-    renderBookings(); renderTasks(); renderHistory(); lock();
+    $('limits-help').textContent = 'Gäller valt datum. ' + data.limits.slot + ' pizzor per kvart, ' + data.limits.hour + ' per timme och ' + data.limits.seats + ' sittplatser.';
+    renderBookings(); renderWaste(); renderTasks(); renderHistory(); lock();
+    if (!isAdmin() && ['stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
   }
-  document.querySelectorAll('[data-view]').forEach(button => button.addEventListener('click', () => switchView(button.dataset.view)));
-  document.querySelectorAll('[data-phase]').forEach(button => button.addEventListener('click', () => { taskPhase = button.dataset.phase; renderTasks(); }));
+
+  // ---------- Statistik ----------
+  async function loadStats() {
+    const to = today(), from = new Date(Date.parse(to + 'T12:00:00Z') - (statsDays - 1) * 864e5).toISOString().slice(0, 10);
+    $('stats-summary').replaceChildren(el('div', 'Hämtar statistik.'));
+    const result = await adminCall('stats?from=' + from + '&to=' + to);
+    if (result) { stats = result; renderStats(); }
+  }
+  function renderStats() {
+    const days = stats.days, sum = key => days.reduce((n, d) => n + d[key], 0);
+    const pizzas = sum('bookedPizzas') + sum('dropin'), waste = sum('waste');
+    const tiles = [['Sålda pizzor', pizzas, 'bokade ' + sum('bookedPizzas') + ' · drop-in ' + sum('dropin')], ['Uppskattad försäljning', kr(pizzas * stats.avgPizzaPrice), 'snittpris ' + stats.avgPizzaPrice + ' kr'],
+      ['Svinn', waste, 'ca ' + kr(waste * stats.wasteCost) + ' i råvaror'], ['Gäster som åt här', sum('guests'), sum('cancelled') + ' avbokningar']];
+    $('stats-summary').replaceChildren(...tiles.map(([label, value, sub]) => { const d = el('div'); d.append(el('span', label), el('strong', String(value)), el('small', sub)); return d; }));
+    // Stapeldiagram: bokade + drop-in per dag, svinn som egen markering.
+    const W = 640, H = 220, B = 26, T = 18, max = Math.max(1, ...days.map(d => d.bookedPizzas + d.dropin));
+    const step = [1, 2, 5, 10, 20, 25, 50, 100, 200, 500].find(s => max / s <= 4) || 1000, top = Math.ceil(max / step) * step;
+    const y = v => T + (H - T - B) * (1 - v / top), bw = W / days.length;
+    const ns = 'http://www.w3.org/2000/svg', svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', '0 0 ' + W + ' ' + H); svg.setAttribute('role', 'img'); svg.setAttribute('aria-label', 'Pizzor per dag');
+    const add = (tag, attrs, text) => { const n = document.createElementNS(ns, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); if (text !== undefined) n.textContent = text; svg.append(n); return n; };
+    for (let v = 0; v <= top; v += step) { add('line', { x1: 0, x2: W, y1: y(v), y2: y(v), class: 'grid' }); add('text', { x: W, y: y(v) - 4, 'text-anchor': 'end', class: 'axis' }, v); }
+    const every = Math.ceil(days.length / 10);
+    days.forEach((d, i) => {
+      const x = i * bw + bw * 0.18, w = bw * 0.64, booked = d.bookedPizzas, total = booked + d.dropin;
+      if (booked) add('rect', { x, y: y(booked), width: w, height: y(0) - y(booked), class: 'bar-booked' }).append(Object.assign(document.createElementNS(ns, 'title'), { textContent: short(d.date) + ': ' + booked + ' bokade' }));
+      if (d.dropin) add('rect', { x, y: y(total), width: w, height: y(booked) - y(total), class: 'bar-dropin' }).append(Object.assign(document.createElementNS(ns, 'title'), { textContent: short(d.date) + ': ' + d.dropin + ' drop-in' }));
+      if (d.waste) add('rect', { x: x + w * 0.25, y: y(0) + 3, width: w * 0.5, height: 4, class: 'bar-waste' });
+      if (i % every === 0) add('text', { x: x + w / 2, y: H - 6, 'text-anchor': 'middle', class: 'axis' }, short(d.date).replace('.', ''));
+    });
+    const legend = el('p', undefined, 'chart-legend');
+    legend.append(el('span', 'Bokade', 'key booked'), el('span', 'Drop-in', 'key dropin'), el('span', 'Svinn', 'key waste'));
+    $('stats-chart').replaceChildren(svg, legend);
+    const wasteRoot = $('stats-waste'); wasteRoot.replaceChildren();
+    const entries = Object.entries(stats.wasteByReason).sort((a, b) => b[1] - a[1]), total = entries.reduce((n, [, v]) => n + v, 0);
+    if (!entries.length) wasteRoot.append(el('p', 'Inget svinn med orsak registrerat under perioden.', 'muted'));
+    entries.forEach(([reason, qty]) => { const row = el('div', undefined, 'meter-row'), bar = el('div', undefined, 'meter'), fill = el('i'); fill.style.width = (qty / total * 100) + '%'; bar.append(fill); row.append(el('span', reasons[reason] || reason), bar, el('strong', String(qty))); wasteRoot.append(row); });
+    const items = Object.entries(stats.wasteByItem).sort((a, b) => b[1] - a[1]);
+    if (items.length) wasteRoot.append(el('p', 'Oftast: ' + items.slice(0, 3).map(([n, q]) => n + ' (' + q + ')').join(', '), 'muted'));
+    const table = $('stats-table'); table.replaceChildren();
+    const head = el('tr'); ['Dag', 'Bokade pizzor', 'Drop-in', 'Svinn', 'Gäster', 'Avbokade', 'Uppskattad försäljning'].forEach(h => head.append(el('th', h))); table.append(head);
+    days.slice().reverse().forEach(d => { const tr = el('tr'); [short(d.date), d.bookedPizzas, d.dropin, d.waste, d.guests, d.cancelled, kr((d.bookedPizzas + d.dropin) * stats.avgPizzaPrice)].forEach((v, i) => tr.append(el('td', String(v), i ? 'num' : ''))); table.append(tr); });
+  }
+
+  // ---------- Meny ----------
+  async function loadMenu() { const result = await adminCall('menu'); if (result) { menu = result; renderMenu(); } }
+  function menuForm(item) {
+    const form = el('form', undefined, 'menu-item' + (item.active === false ? ' hidden-item' : ''));
+    const field = (label, input) => { const wrap = el('div'), l = el('label', label); input.id = 'menu-' + label.replace(/\W/g, '') + '-' + (item.id || 'new'); l.htmlFor = input.id; wrap.append(l, input); return wrap; };
+    const name = el('input'); name.value = item.name || ''; name.required = true; name.minLength = 2; name.maxLength = 80;
+    const price = el('input'); price.type = 'number'; price.min = 0; price.max = 10000; price.value = item.price ?? 160; price.required = true;
+    const category = el('select'); [['pizza', 'Pizza'], ['dolce', 'Dolce & caffè']].forEach(([v, t]) => { const o = el('option', t); o.value = v; o.selected = item.category === v; category.append(o); });
+    const desc = el('textarea'); desc.value = item.description || ''; desc.maxLength = 300; desc.rows = 2;
+    const active = el('input'); active.type = 'checkbox'; active.checked = item.active !== false;
+    const activeLabel = el('label', undefined, 'admin-checkbox'); activeLabel.append(active, document.createTextNode('Visas på hemsidan'));
+    const save = el('button', item.id ? 'Spara' : 'Lägg till', 'admin-primary'); save.type = 'submit';
+    const top = el('div', undefined, 'menu-item-top'); top.append(field('Namn', name), field('Pris (kr)', price), field('Kategori', category));
+    form.append(top, field('Beskrivning', desc), activeLabel, save);
+    form.addEventListener('submit', async event => {
+      event.preventDefault(); if (!form.reportValidity()) return;
+      const result = await adminCall('menu', { item: { id: item.id || null, name: name.value, price: Number(price.value), category: category.value, description: desc.value, active: active.checked } }, 'Menyn är sparad.');
+      if (result) { menu = result; renderMenu(); }
+    });
+    return form;
+  }
+  function renderMenu(extra) {
+    const root = $('menu-list'); root.replaceChildren();
+    if (extra) root.append(extra);
+    for (const [cat, title] of [['pizza', 'Pizza'], ['dolce', 'Dolce & caffè']]) {
+      const items = menu.filter(m => m.category === cat); if (!items.length) continue;
+      root.append(el('h3', title, 'menu-group-title')); items.forEach(m => root.append(menuForm(m)));
+    }
+  }
+
+  // ---------- Personal ----------
+  async function loadStaff() { const result = await adminCall('staff'); if (result) { staff = result; renderStaff(); } }
+  function renderStaff() {
+    const root = $('staff-list'); root.replaceChildren();
+    const me = data.actor.email, owner = data.actor.role === 'owner';
+    $('staff-role').querySelector('option[value="admin"]').disabled = !owner;
+    staff.forEach(s => {
+      const row = el('article', undefined, 'staff-row' + (s.active ? '' : ' inactive'));
+      const who = el('div'); who.append(el('strong', s.name), el('small', [s.title, s.email].filter(Boolean).join(' · ')));
+      const badge = el('span', roles[s.role] + (s.active ? '' : ' · inaktiv'), 'role-badge ' + s.role);
+      const actions = el('div', undefined, 'booking-actions-list');
+      const editable = s.email !== me && s.role !== 'owner' && (owner || s.role === 'staff');
+      if (editable) {
+        if (owner) actions.append(button(s.role === 'admin' ? 'Gör till personal' : 'Gör till admin', 'secondary-button', async () => { const r = await adminCall('staff', { action: 'set_role', userId: s.userId, role: s.role === 'admin' ? 'staff' : 'admin' }, 'Rollen är ändrad.'); if (r) { staff = r; renderStaff(); } }));
+        actions.append(button(s.active ? 'Inaktivera' : 'Aktivera', 'secondary-button', async () => { const r = await adminCall('staff', { action: 'set_active', userId: s.userId, active: !s.active }, s.active ? s.name + ' kan inte längre logga in.' : s.name + ' kan logga in igen.'); if (r) { staff = r; renderStaff(); } }));
+        actions.append(button('Nytt lösenord', 'text-button', () => { resetUserId = s.userId; $('password-description').textContent = 'För ' + s.name + '. Ge lösenordet till personen, som sedan byter det under Mitt konto.'; $('reset-password').value = ''; $('password-dialog').showModal(); }));
+      } else if (s.email === me) actions.append(el('span', 'Du', 'muted'));
+      row.append(who, badge, actions); root.append(row);
+    });
+  }
+
+  // ---------- Inställningar ----------
+  const cfgFields = ['slotCap', 'hourCap', 'seats', 'sittingMin', 'arrivalMin', 'horizonDays', 'maxCount', 'maxGuests', 'avgPizzaPrice', 'wasteCost'];
+  const cfgColumns = { slotCap: 'slot_cap', hourCap: 'hour_cap', seats: 'seats', sittingMin: 'sitting_min', arrivalMin: 'arrival_min', horizonDays: 'horizon_days', maxCount: 'max_count', maxGuests: 'max_guests', avgPizzaPrice: 'avg_pizza_price', wasteCost: 'waste_cost' };
+  async function loadConfig() { const result = await adminCall('config'); if (result) { config = result; renderConfig(); } }
+  function renderConfig() {
+    cfgFields.forEach(f => { $('cfg-' + f).value = config[cfgColumns[f]]; });
+    ['lunchFirst', 'lunchLast', 'dinnerFirst', 'dinnerLast'].forEach(f => { $('cfg-' + f).value = time(config[f.replace(/[A-Z]/, c => '_' + c.toLowerCase())]); });
+    const boxes = $('weekday-boxes'); boxes.replaceChildren();
+    weekdays.forEach(([n, label]) => { const l = el('label', undefined, 'admin-checkbox'), c = el('input'); c.type = 'checkbox'; c.value = n; c.checked = config.open_weekdays.includes(n); c.id = 'wd-' + n; l.append(c, document.createTextNode(label)); boxes.append(l); });
+    $('closed-date').min = today();
+    const list = $('closed-list'); list.replaceChildren();
+    if (!config.closedDates.length) list.append(el('p', 'Inga extra stängda datum.', 'muted'));
+    config.closedDates.forEach(c => { const row = el('div', undefined, 'waste-row'), text = el('div'); text.append(el('strong', readable(c.date)), el('small', [c.reason, 'stängt av ' + c.created_by].filter(Boolean).join(' · '))); row.append(text, button('Öppna igen', 'text-button', async () => { const r = await adminCall('config', { action: 'reopen_date', date: c.date }, 'Datumet är öppet för bokning igen.'); if (r) { config = r; renderConfig(); } })); list.append(row); });
+  }
+
+  // ---------- Händelser ----------
+  document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => switchView(b.dataset.view)));
+  document.querySelectorAll('[data-phase]').forEach(b => b.addEventListener('click', () => { taskPhase = b.dataset.phase; renderTasks(); }));
+  document.querySelectorAll('[data-period]').forEach(b => b.addEventListener('click', () => { statsDays = Number(b.dataset.period); document.querySelectorAll('[data-period]').forEach(x => x.setAttribute('aria-pressed', String(x === b))); loadStats(); }));
   $('only-open-tasks').addEventListener('change', renderTasks);
-  document.querySelectorAll('[data-counter]').forEach(button => button.addEventListener('click', () => mutate('counter', { date: data.day.date, field: button.dataset.counter, delta: Number(button.dataset.delta) }, 'Antalet är sparat.')));
+  document.querySelectorAll('[data-counter]').forEach(b => b.addEventListener('click', () => mutate('counter', { date: data.day.date, field: b.dataset.counter, delta: Number(b.dataset.delta) }, 'Antalet är sparat.')));
   document.querySelectorAll('[data-counter-form]').forEach(form => form.addEventListener('submit', event => { event.preventDefault(); if (!form.reportValidity()) return; const field = form.dataset.counterForm; mutate('counter', { date: data.day.date, field, mode: 'set', value: Number($(field + '-manual').value), version: data.day.version }, 'Totalsumman är sparad.'); }));
   document.querySelectorAll('form').forEach(form => form.addEventListener('input', () => { dirty = true; }));
+  $('waste-form').addEventListener('submit', async event => { event.preventDefault(); if (!event.target.reportValidity() || !data) return; const ok = await mutate('waste', { date: data.day.date, item: $('waste-item').value, qty: Number($('waste-qty').value), reason: $('waste-reason').value, note: $('waste-note').value }, 'Svinnet är registrerat.'); if (ok) { $('waste-qty').value = 1; $('waste-note').value = ''; } });
   $('stock-form').addEventListener('submit', event => { event.preventDefault(); if (!event.target.reportValidity() || !data) return; mutate('settings', { date: data.day.date, prepared: $('prepared').value === '' ? null : Number($('prepared').value), paused: !!data.day.paused, allowAfterClosing: !!data.day.allow_after_closing, version: data.day.version }, 'Dagens pizzantal är sparat.'); });
   $('settings-form').addEventListener('submit', event => { event.preventDefault(); if (!event.target.reportValidity() || !data) return; mutate('settings', { date: data.day.date, prepared: data.day.prepared, paused: $('paused').checked, allowAfterClosing: $('after-closing').checked, version: data.day.version }, 'Dagens inställningar är sparade.'); });
   $('start-checklist').addEventListener('click', () => { if (data) mutate('task', { date: data.day.date, action: 'start_checklist' }, 'Standardlistan är tillagd. Du kan ändra eller ta bort varje uppgift.'); });
@@ -215,13 +391,55 @@
   $('search-bookings').addEventListener('input', renderBookings); $('status-filter').addEventListener('change', renderBookings);
   $('work-date').value = today(); $('work-date').addEventListener('change', () => { if ($('work-date').value) load(); });
   $('today').addEventListener('click', () => { $('work-date').value = today(); load(); }); $('refresh').addEventListener('click', () => load());
+  function downloadCsv(name, rows) {
+    const csv = value => { let text = String(value ?? ''); if (/^[=+@-]/.test(text)) text = "'" + text; return '"' + text.replaceAll('"', '""') + '"'; };
+    const url = URL.createObjectURL(new Blob(['﻿' + rows.map(row => row.map(csv).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' })); const a = el('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
   $('export-bookings').addEventListener('click', () => {
     if (!data) return;
-    const csv = value => { let text = String(value ?? ''); if (/^[=+@-]/.test(text)) text = "'" + text; return '"' + text.replaceAll('"', '""') + '"'; };
-    const rows = [['Datum', 'Färdigtid', 'Namn', 'E-post', 'Telefon', 'Pizzor', 'Gäster', 'Typ', 'Status', 'Avbokningsorsak'], ...data.bookings.map(b => [b.date, time(b.ready_min), b.name, b.email, b.phone, b.count, b.guests, b.mode === 'here' ? 'Äta här' : 'Ta med', labels[b.status], b.cancel_reason])];
-    const url = URL.createObjectURL(new Blob(['\ufeff' + rows.map(row => row.map(csv).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' })); const a = el('a'); a.href = url; a.download = 'albert-bokningar-' + data.day.date + '.csv'; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadCsv('albert-bokningar-' + data.day.date + '.csv', [['Datum', 'Färdigtid', 'Namn', 'E-post', 'Telefon', 'Pizzor', 'Gäster', 'Typ', 'Status', 'Avbokningsorsak'], ...data.bookings.map(b => [b.date, time(b.ready_min), b.name, b.email, b.phone, b.count, b.guests, b.mode === 'here' ? 'Äta här' : 'Ta med', labels[b.status], b.cancel_reason])]);
   });
-  setInterval(() => { if (data && !busy && !fetching && !dirty && !needsRefresh && !document.hidden && !$('cancel-dialog').open && !document.querySelector('.task-edit[open]') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) load(true); }, 30000);
+  $('export-stats').addEventListener('click', () => {
+    if (!stats) return;
+    downloadCsv('albert-statistik-' + stats.from + '-' + stats.to + '.csv', [['Datum', 'Bokade pizzor', 'Drop-in', 'Svinn', 'Gäster', 'Avbokade', 'Förberedda', 'Uppskattad försäljning (kr)'], ...stats.days.map(d => [d.date, d.bookedPizzas, d.dropin, d.waste, d.guests, d.cancelled, d.prepared ?? '', (d.bookedPizzas + d.dropin) * stats.avgPizzaPrice])]);
+  });
+  $('menu-add').addEventListener('click', () => { if (menu) { renderMenu(menuForm({ active: false, category: 'pizza' })); $('menu-list').querySelector('input')?.focus(); } });
+  $('staff-form').addEventListener('submit', async event => {
+    event.preventDefault(); if (!event.target.reportValidity()) return;
+    const result = await adminCall('staff', { action: 'create', name: $('staff-name').value, email: $('staff-email').value, title: $('staff-title').value, role: $('staff-role').value, password: $('staff-password').value }, $('staff-name').value + ' är tillagd och kan logga in.');
+    if (result) { staff = result; event.target.reset(); renderStaff(); }
+  });
+  $('password-close').addEventListener('click', () => $('password-dialog').close());
+  $('password-form').addEventListener('submit', async event => { event.preventDefault(); if (!event.target.reportValidity()) return; const r = await adminCall('staff', { action: 'password_reset', userId: resetUserId, password: $('reset-password').value }, 'Det nya lösenordet är sparat.'); if (r) { staff = r; $('password-dialog').close(); renderStaff(); } });
+  $('config-form').addEventListener('submit', async event => {
+    event.preventDefault(); if (!event.target.reportValidity() || !config) return;
+    const settings = { version: config.version, openWeekdays: [...document.querySelectorAll('#weekday-boxes input:checked')].map(c => Number(c.value)) };
+    cfgFields.forEach(f => { settings[f] = Number($('cfg-' + f).value); });
+    ['lunchFirst', 'lunchLast', 'dinnerFirst', 'dinnerLast'].forEach(f => { settings[f] = minutes($('cfg-' + f).value); });
+    const result = await adminCall('config', { action: 'save', settings }, 'Inställningarna är sparade och gäller direkt för nya bokningar.');
+    if (result) { config = result; renderConfig(); }
+  });
+  $('closed-form').addEventListener('submit', async event => {
+    event.preventDefault(); if (!event.target.reportValidity()) return;
+    const result = await adminCall('config', { action: 'close_date', date: $('closed-date').value, reason: $('closed-reason').value }, 'Datumet är stängt för nya bokningar. Kontrollera om det finns bokningar som behöver kontaktas.');
+    if (result) { config = result; event.target.reset(); renderConfig(); }
+  });
+  $('login-form').addEventListener('submit', async event => {
+    event.preventDefault(); if (!event.target.reportValidity()) return;
+    const submit = event.target.querySelector('button'); submit.disabled = true; $('login-message').textContent = 'Loggar in.';
+    try { await http('/api/auth/login', { email: $('login-email').value, password: $('login-password').value }); $('login-password').value = ''; $('login-message').textContent = ''; await load(); switchView('day'); }
+    catch (error) { $('login-message').textContent = error.message; }
+    finally { submit.disabled = false; }
+  });
+  $('logout').addEventListener('click', async () => { try { await http('/api/auth/logout', {}); } catch { /* utloggad ändå */ } showLogin('Du är utloggad.'); });
+  $('account-button').addEventListener('click', () => { $('account-description').textContent = data ? data.actor.name + ' · ' + data.actor.email : ''; $('new-password').value = ''; $('account-dialog').showModal(); });
+  $('account-close').addEventListener('click', () => $('account-dialog').close());
+  $('account-form').addEventListener('submit', async event => {
+    event.preventDefault(); if (!event.target.reportValidity()) return;
+    try { await http('/api/auth/password', { password: $('new-password').value }); $('account-dialog').close(); note('Ditt lösenord är bytt.', true); }
+    catch (error) { $('account-description').textContent = error.message; }
+  });
+  setInterval(() => { if (data && view !== 'config' && view !== 'menu' && view !== 'staff' && !busy && !fetching && !dirty && !needsRefresh && !document.hidden && !document.querySelector('dialog[open]') && !document.querySelector('.task-edit[open]') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) load(true); }, 30000);
   switchView(view);
   load();
 })();

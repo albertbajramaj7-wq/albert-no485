@@ -78,3 +78,24 @@
   const year = document.getElementById('year');
   if (year) year.textContent = new Date().getFullYear();
 })();
+
+// Menyn hämtas från adminsystemet. Om det inte går ligger den inbyggda menyn kvar.
+(() => {
+  const sections = document.querySelectorAll('[data-menu-category]');
+  if (!sections.length) return;
+  fetch('/api/menu', { cache: 'no-store' }).then(r => r.ok ? r.json() : null).then(items => {
+    if (!Array.isArray(items) || !items.length) return;
+    sections.forEach(section => {
+      const grid = section.querySelector('.full-menu-grid');
+      const rows = items.filter(item => item.category === section.dataset.menuCategory);
+      if (!grid) return;
+      section.hidden = !rows.length;
+      grid.replaceChildren(...rows.map(item => {
+        const article = document.createElement('article'), top = document.createElement('div'), h3 = document.createElement('h3'), price = document.createElement('span'), p = document.createElement('p');
+        article.className = 'dish'; top.className = 'dish-top'; price.className = 'price';
+        h3.textContent = item.name; price.textContent = item.price + ' kr'; p.textContent = item.description;
+        top.append(h3, price); article.append(top, p); return article;
+      }));
+    });
+  }).catch(() => {});
+})();
