@@ -170,3 +170,6 @@
 @media (max-width:760px){.stock-row{grid-template-columns:minmax(0,1fr) auto}.stock-count{grid-column:1/-1;justify-content:space-between}}
 /* Som app på hemskärmen: håll innehållet fritt från iPadens/iPhonens kanter */
 @media (display-mode: standalone){.admin-topbar{padding-top:env(safe-area-inset-top)}.admin-drawer,.drawer-backdrop{top:calc(72px + env(safe-area-inset-top))}}
+/* Huvudsiffror på mobil/surfplatta: två i bredd */
+@media (max-width:900px){.key-figures{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.key-figures>div{min-height:0;padding:16px}}
+@media (max-width:480px){.key-figures strong{font-size:30px;margin:6px 0 4px}.key-figures .booking-state{font-size:20px;margin:8px 0 4px}.key-figures span{font-size:13px}.key-figures small{font-size:12px}.workspace-heading h1{font-size:26px}}
