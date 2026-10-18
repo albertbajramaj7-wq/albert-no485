@@ -92,3 +92,13 @@
 @media (max-width:900px){.day-summary{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:600px){.admin-topbar-inner{min-height:64px}.admin-drawer{top:64px}.drawer-backdrop{top:64px}.account-links span{display:none}.menu-toggle{padding:10px 14px}.admin-brand{width:72px}.workspace-heading{flex-direction:column;align-items:stretch}}
 .topbar-button{white-space:nowrap}@media (max-width:600px){.account-links{gap:12px}.topbar-button{font-size:13px}}
+/* Huvudsiffror */
+.key-figures{grid-template-columns:repeat(4,minmax(0,1fr))}
+.key-figures>div{padding:20px 22px;min-height:132px;display:flex;flex-direction:column}
+.key-figures span{font-size:14px}
+.key-figures strong{font-size:44px;line-height:1.1;margin:10px 0 6px;letter-spacing:-1px}
+.key-figures small{color:var(--muted);font-size:13px;margin-top:auto}
+.key-figures .kf-main{background:var(--g-100);border-color:#cfe0d5}
+.key-figures .booking-state{font-size:26px;margin:16px 0 6px}
+.day-controls{flex-wrap:wrap}
+@media (max-width:900px){.key-figures strong{font-size:34px}}

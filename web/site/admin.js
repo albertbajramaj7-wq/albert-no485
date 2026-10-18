@@ -27,7 +27,7 @@
   function note(message, success = false) { $('notice').textContent = message; $('notice').hidden = !message; $('notice').classList.toggle('success', success); }
   function lock() {
     document.querySelectorAll('[data-mutation]').forEach(b => { b.disabled = busy || fetching || needsRefresh || (b.dataset.email === 'true' && !data?.emailSetup?.configured) || (!!b.dataset.counter && Number(b.dataset.delta) < 0 && (!data || data.day[b.dataset.counter] === 0)); });
-    $('work-date').disabled = busy; $('today').disabled = busy; $('refresh').disabled = busy;
+    $('work-date').disabled = busy; $('today').disabled = busy; $('prev-day').disabled = busy; $('next-day').disabled = busy; $('refresh').disabled = busy;
   }
   async function http(path, body, method) {
     const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 20000);
@@ -258,10 +258,16 @@
     $('email-setup').textContent = 'Mejlbekräftelser är inte aktiverade ännu. Resend behöver en API-nyckel och en verifierad avsändare. Bokningar sparas som vanligt.';
     $('day-label').textContent = readable(data.day.date);
     $('closed-banner').hidden = !data.closed; $('closed-banner').textContent = data.closed ? 'Stängt för nya bokningar den här dagen' + (data.closedReason ? ': ' + data.closedReason : '.') : '';
-    $('stat-booked').textContent = data.stats.booked;
-    $('stat-remaining').textContent = data.stats.remaining === null ? 'Ej satt' : data.stats.remaining;
+    const live = data.bookings.filter(b => b.status !== 'cancelled'), used = data.stats.booked + data.day.dropin + data.day.waste;
+    $('kf-remaining').textContent = data.stats.remaining === null ? 'Ej satt' : data.stats.remaining;
+    $('kf-remaining-sub').textContent = data.day.prepared === null ? 'Ange dagens pizzor nedan' : 'Av ' + data.day.prepared + ' totalt · ' + data.day.dropin + ' drop-in';
+    $('kf-booked').textContent = data.stats.booked; $('kf-dropin').textContent = data.day.dropin; $('kf-waste').textContent = data.day.waste; $('kf-used').textContent = used;
+    $('kf-bookings').textContent = live.length;
+    $('kf-bookings-sub').textContent = live.filter(b => b.mode === 'here').reduce((n, b) => n + b.guests, 0) + ' gäster som äter här';
+    $('kf-checked').textContent = data.bookings.filter(b => ['checked_in', 'completed'].includes(b.status)).length;
+    $('kf-open-sub').textContent = data.closed ? 'Stängt den här dagen' : data.day.paused ? 'Pausad för dagen' : 'Gäster kan boka';
     $('stock-explanation').textContent = data.day.prepared === null ? 'Ingen dagsgräns satt. Lämna tomt för att ta bort en gräns.' : 'Av ' + data.day.prepared + ' förberedda dras bokningar, drop-in och svinn av.';
-    $('guests-present').textContent = data.stats.guestsPresent; $('booking-open').textContent = data.closed ? 'Stängt' : data.day.paused ? 'Pausad' : 'Öppen';
+    $('booking-open').textContent = data.closed ? 'Stängt' : data.day.paused ? 'Pausad' : 'Öppen';
     $('booking-open').classList.toggle('paused', !!data.day.paused || data.closed);
     $('dropin-value').textContent = data.day.dropin; $('waste-value').textContent = data.day.waste;
     $('dropin-manual').value = data.day.dropin; $('waste-manual').value = data.day.waste;
@@ -400,7 +406,9 @@
   $('cancel-form').addEventListener('submit', event => { event.preventDefault(); if (!event.target.reportValidity()) return; mutate('booking', { id: cancelId, action: 'cancel', reason: $('cancel-reason').value }, 'Bokningen är avbokad.'); });
   $('search-bookings').addEventListener('input', renderBookings); $('status-filter').addEventListener('change', renderBookings);
   $('work-date').value = today(); $('work-date').addEventListener('change', () => { if ($('work-date').value) load(); });
-  $('today').addEventListener('click', () => { $('work-date').value = today(); load(); }); $('refresh').addEventListener('click', () => load());
+  $('today').addEventListener('click', () => { $('work-date').value = today(); load(); });
+  const shiftDay = n => { const d = new Date(($('work-date').value || today()) + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); $('work-date').value = d.toISOString().slice(0, 10); load(); };
+  $('prev-day').addEventListener('click', () => shiftDay(-1)); $('next-day').addEventListener('click', () => shiftDay(1)); $('refresh').addEventListener('click', () => load());
   function downloadCsv(name, rows) {
     const csv = value => { let text = String(value ?? ''); if (/^[=+@-]/.test(text)) text = "'" + text; return '"' + text.replaceAll('"', '""') + '"'; };
     const url = URL.createObjectURL(new Blob(['﻿' + rows.map(row => row.map(csv).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' })); const a = el('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 1000);

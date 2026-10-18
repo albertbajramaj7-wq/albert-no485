@@ -34,7 +34,7 @@
   <main id="workspace" class="admin-workspace">
     <div class="workspace-heading">
       <div><h1 id="view-title">Dagsvy</h1><p id="day-label"></p></div>
-      <div class="day-controls" id="day-controls"><label class="sr-only" for="work-date">Arbetsdag</label><input type="date" id="work-date"><button id="today" type="button">I dag</button><button id="refresh" type="button">Uppdatera</button></div>
+      <div class="day-controls" id="day-controls"><label class="sr-only" for="work-date">Arbetsdag</label><button id="prev-day" type="button">Förra dagen</button><input type="date" id="work-date"><button id="next-day" type="button">Nästa dag</button><button id="today" type="button">I dag</button><button id="refresh" type="button">Uppdatera</button></div>
     </div>
     <div id="notice" class="admin-notice" role="status" hidden></div>
     <section id="login-panel" class="login-panel" hidden>
@@ -51,11 +51,15 @@
     <div id="admin-content" hidden>
       <section data-panel="day">
         <p id="closed-banner" class="admin-notice" hidden></p>
-        <div class="day-summary" aria-label="Dagens läge">
-          <div><span>Bokade pizzor</span><strong id="stat-booked">—</strong></div>
-          <div><span>Kvar att boka</span><strong id="stat-remaining">—</strong></div>
-          <div><span>Incheckade gäster</span><strong id="guests-present">—</strong></div>
-          <div><span>Nya bokningar</span><strong id="booking-open" class="booking-state">—</strong></div>
+        <div class="day-summary key-figures" aria-label="Dagens huvudsiffror">
+          <div class="kf-main"><span>Återstående pizzor</span><strong id="kf-remaining">—</strong><small id="kf-remaining-sub"></small></div>
+          <div><span>Bokade pizzor</span><strong id="kf-booked">—</strong><small>Räknas av automatiskt</small></div>
+          <div><span>Sålda drop-in-pizzor</span><strong id="kf-dropin">—</strong><small>Plus/minus eller manuellt antal</small></div>
+          <div><span>Förstörda pizzor</span><strong id="kf-waste">—</strong><small>Svinn räknas inte som sålt</small></div>
+          <div><span>Totalt förbrukade pizzor</span><strong id="kf-used">—</strong><small>Bokningar, drop-in och svinn</small></div>
+          <div><span>Bokningar</span><strong id="kf-bookings">—</strong><small id="kf-bookings-sub"></small></div>
+          <div><span>Incheckade</span><strong id="kf-checked">—</strong><small id="kf-checked-sub">Sällskap som har kommit</small></div>
+          <div><span>Nya bokningar</span><strong id="booking-open" class="booking-state">—</strong><small id="kf-open-sub"></small></div>
         </div>
         <div class="daily-controls">
           <section class="admin-card stock-card">
