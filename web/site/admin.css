@@ -102,3 +102,14 @@
 .key-figures .booking-state{font-size:26px;margin:16px 0 6px}
 .day-controls{flex-wrap:wrap}
 @media (max-width:900px){.key-figures strong{font-size:34px}}
+/* Färger efter loggan: mörkbrunt (Albert), grått (NO.485) och varm beige */
+.admin-app{--g-900:#46302a;--g-800:#5a3f36;--g-700:#6e5047;--g-100:#efe6dc;--g-50:#f7f2ec;--soft:#f6f2ed;--line:#e6dfd7;--text:#2a1f1b;--muted:#7a716b;--warm:#f6ece0;background:#f7f4f0}
+.admin-brand img{filter:none}
+.admin-drawer .admin-tabs button[aria-current=page]{background:#6e5047}
+.admin-drawer hr{border-top-color:rgba(255,255,255,.22)}
+.key-figures .kf-main{background:#efe6dc;border-color:#e2d4c6}
+.counter-buttons button{background:#f7f2ec;border-color:#e2d4c6}
+.admin-notice.success{background:#efe6dc;border-color:#e2d4c6}
+.stats-chart .bar-booked{fill:#46302a}.stats-chart .bar-dropin{fill:#a19f98}.key.booked::before{background:#46302a}.key.dropin::before{background:#a19f98}
+.admin-app input:focus-visible,.admin-app textarea:focus-visible,.admin-app select:focus-visible{outline-color:#6e5047}
+.admin-checkbox input{accent-color:#46302a}
