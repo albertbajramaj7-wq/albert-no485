@@ -8,7 +8,8 @@ export class AppError extends Error {
 // Supabase har två sorters nycklar: äldre (JWT, börjar med "eyJ") och nyare ("sb_publishable_…" / "sb_secret_…").
 // De nyare får bara skickas i apikey-rubriken, inte som Bearer-token.
 const clean = key => String(key || '').trim().replace(/^["']|["']$/g, '');
-export function keyKind(key) { const k = clean(key); return !k ? 'saknas' : k.startsWith('eyJ') ? 'ok (eyJ…, ' + k.length + ' tecken)' : k.startsWith('sb_') ? 'ok (' + k.slice(0, 14) + '…)' : 'okänd: börjar med "' + k.slice(0, 4) + '", ' + k.length + ' tecken'; }
+function jwtRole(k) { try { return JSON.parse(Buffer.from(k.split('.')[1], 'base64url').toString()).role || 'okänd'; } catch { return 'okänd'; } }
+export function keyKind(key) { const k = clean(key); return !k ? 'saknas' : k.startsWith('eyJ') ? 'ok (eyJ…, ' + k.length + ' tecken, roll: ' + jwtRole(k) + ')' : k.startsWith('sb_') ? 'ok (' + k.slice(0, 14) + '…)' : 'okänd: börjar med "' + k.slice(0, 4) + '", ' + k.length + ' tecken'; }
 function serverHeaders(key) {
   const k = clean(key), h = { apikey: k, 'Content-Type': 'application/json', Accept: 'application/json' };
   if (k.startsWith('eyJ')) h.Authorization = `Bearer ${k}`;
