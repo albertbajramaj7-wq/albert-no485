@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#23261f"><meta name="robots" content="noindex,nofollow">
+  <title>Admin | Albert NO.485</title>
+  <link rel="stylesheet" href="/assets/site.css"><link rel="stylesheet" href="/assets/admin.css">
+  <script src="/assets/admin.js" defer></script>
+</head>
+<body class="admin-app">
+  <a class="skip" href="#workspace">Till innehållet</a>
+  <header class="admin-topbar">
+    <div class="admin-topbar-inner">
+      <a href="/" class="admin-brand" aria-label="Albert startsida"><img src="/assets/albert-transparent.png" alt="Albert NO.485" width="1024" height="1024"></a>
+      <span class="admin-label">Admin</span>
+      <div class="account-links"><span id="account-name"></span><a href="/" target="_blank" rel="noopener">Hemsidan</a><a href="/signout-with-chatgpt?return_to=%2F" target="_top">Logga ut</a></div>
+    </div>
+  </header>
+  <main id="workspace" class="admin-workspace">
+    <div class="workspace-heading">
+      <div><h1 id="view-title">Dagsvy</h1><p id="day-label"></p></div>
+      <div class="day-controls"><label class="sr-only" for="work-date">Arbetsdag</label><input type="date" id="work-date"><button id="today" type="button">I dag</button><button id="refresh" type="button">Uppdatera</button></div>
+    </div>
+    <nav class="admin-tabs" aria-label="Admin">
+      <button type="button" data-view="day" aria-current="page">Dagsvy</button>
+      <button type="button" data-view="tasks">Arbetsuppgifter <span id="task-tab-count" class="tab-count"></span></button>
+      <button type="button" data-view="history">Historik</button>
+    </nav>
+    <div id="notice" class="admin-notice" role="status" hidden></div>
+    <section id="login-panel" class="login-panel" hidden><h2>Välkommen tillbaka.</h2><p id="login-message">Logga in för att hantera restaurangen.</p><a class="admin-primary" href="/signin-with-chatgpt?return_to=%2Fadmin%2F" target="_top">Logga in med ChatGPT</a></section>
+    <div id="loading" class="admin-loading" role="status">Hämtar din arbetsdag.</div>
+    <div id="admin-content" hidden>
+      <section data-panel="day">
+        <div class="day-summary" aria-label="Dagens läge">
+          <div><span>Bokade pizzor</span><strong id="stat-booked">—</strong></div>
+          <div><span>Kvar att boka</span><strong id="stat-remaining">—</strong></div>
+          <div><span>Incheckade gäster</span><strong id="guests-present">—</strong></div>
+          <div><span>Nya bokningar</span><strong id="booking-open" class="booking-state">—</strong></div>
+        </div>
+        <div class="daily-controls">
+          <section class="admin-card stock-card">
+            <h2>Dagens pizzor</h2>
+            <form id="stock-form"><label class="sr-only" for="prepared">Antal förberedda pizzor</label><div class="stock-input"><input id="prepared" type="number" min="0" max="10000" inputmode="numeric" placeholder="Ange antal"><button type="submit" class="admin-primary" data-mutation>Spara</button></div></form>
+            <p id="stock-explanation" class="field-help">Ange hur många pizzor du har förberett.</p>
+          </section>
+          <section class="admin-card counter-card">
+            <h2>Sålda drop-in</h2>
+            <div class="counter-buttons"><button type="button" data-counter="dropin" data-delta="-1" data-mutation aria-label="Minska drop-in med en">−</button><output id="dropin-value" aria-label="Antal sålda drop-in-pizzor">—</output><button type="button" data-counter="dropin" data-delta="1" data-mutation aria-label="Öka drop-in med en">+</button></div>
+            <details class="manual-counter"><summary>Ange antal manuellt</summary><form class="counter-form" data-counter-form="dropin"><label class="sr-only" for="dropin-manual">Totalt antal sålda drop-in-pizzor</label><input id="dropin-manual" type="number" min="0" max="10000" required inputmode="numeric"><button type="submit" class="secondary-button" data-mutation>Spara antal</button></form></details>
+          </section>
+          <section class="admin-card counter-card">
+            <h2>Förstörda / svinn</h2>
+            <div class="counter-buttons"><button type="button" data-counter="waste" data-delta="-1" data-mutation aria-label="Minska svinn med en">−</button><output id="waste-value" aria-label="Antal förstörda pizzor">—</output><button type="button" data-counter="waste" data-delta="1" data-mutation aria-label="Öka svinn med en">+</button></div>
+            <details class="manual-counter"><summary>Ange antal manuellt</summary><form class="counter-form" data-counter-form="waste"><label class="sr-only" for="waste-manual">Totalt antal förstörda pizzor</label><input id="waste-manual" type="number" min="0" max="10000" required inputmode="numeric"><button type="submit" class="secondary-button" data-mutation>Spara antal</button></form></details>
+          </section>
+        </div>
+        <details class="day-settings"><summary>Bokningsinställningar</summary><form id="settings-form"><label class="admin-checkbox"><input id="paused" type="checkbox">Pausa nya bokningar den här dagen</label><label class="admin-checkbox"><input id="after-closing" type="checkbox">Tillåt att gäster sitter kvar efter stängning</label><button type="submit" class="secondary-button" data-mutation>Spara inställningar</button><p class="field-help">Gäller valt datum. 8 pizzor per kvart, 31 per timme och 31 sittplatser.</p></form></details>
+        <section class="bookings-section" aria-labelledby="bookings-title">
+          <p id="email-setup" class="email-setup" hidden></p>
+          <div class="section-heading"><h2 id="bookings-title">Bokningar <span id="booking-count" class="heading-count"></span></h2><a href="/boka-pizza/" class="admin-primary" target="_blank" rel="noopener">Ny bokning</a></div>
+          <div class="booking-toolbar"><label class="sr-only" for="search-bookings">Sök bokning</label><input id="search-bookings" type="search" placeholder="Sök namn eller telefon"><label class="sr-only" for="status-filter">Visa bokningar</label><select id="status-filter"><option value="active">Aktiva</option><option value="all">Alla bokningar</option><option value="confirmed">Bokade</option><option value="checked_in">Incheckade</option><option value="completed">Avslutade</option><option value="cancelled">Avbokade</option></select><button id="export-bookings" type="button" class="text-button">Exportera CSV</button></div>
+          <div id="booking-list"></div>
+        </section>
+      </section>
+      <section data-panel="tasks" hidden>
+        <div class="section-heading task-heading"><div><h2>Dagens checklistor</h2><p class="muted">Kryssa av när uppgiften är klar. Varje dag har sin egen lista.</p></div><span id="task-count" class="progress-label"></span></div>
+        <div class="task-actions"><button type="button" id="start-checklist" class="admin-primary" data-mutation>Lägg till standardlista</button><details class="add-task"><summary>Lägg till egen uppgift</summary><form id="task-form" class="task-form"><div class="task-title-field"><label for="task-title">Vad behöver göras?</label><input id="task-title" required minlength="2" maxlength="180" placeholder="Skriv en uppgift"></div><div><label for="task-category">När?</label><select id="task-category"><option value="opening">Öppning</option><option value="general" selected>Under dagen</option><option value="closing">Stängning</option></select></div><div><label for="task-area">Område</label><select id="task-area"><option value="kitchen">Kök &amp; förberedelser</option><option value="service">Servering &amp; lokal</option><option value="hygiene">Hygien &amp; toalett</option><option value="other" selected>Övrigt</option></select></div><button type="submit" class="admin-primary" data-mutation>Lägg till</button></form></details></div>
+        <div class="task-filters"><div role="group" aria-label="Visa del av arbetsdagen"><button type="button" data-phase="all" aria-pressed="true">Alla</button><button type="button" data-phase="opening" aria-pressed="false">Öppning</button><button type="button" data-phase="general" aria-pressed="false">Under dagen</button><button type="button" data-phase="closing" aria-pressed="false">Stängning</button></div><label class="admin-checkbox"><input type="checkbox" id="only-open-tasks">Visa bara kvarvarande</label></div>
+        <div id="task-list" class="task-columns"></div>
+      </section>
+      <section data-panel="history" hidden><section class="admin-card"><div class="section-heading"><h2>Dagens händelser</h2><span class="muted">Senaste 100</span></div><div id="history-list"></div></section></section>
+    </div>
+  </main>
+  <dialog id="cancel-dialog" class="action-dialog" aria-labelledby="cancel-title"><form id="cancel-form"><h2 id="cancel-title">Avboka bokning</h2><p id="cancel-description"></p><label for="cancel-reason">Anledning</label><textarea id="cancel-reason" minlength="2" maxlength="250" required placeholder="Skriv varför bokningen avbokas."></textarea><div class="dialog-actions"><button type="button" class="secondary-button" id="cancel-close">Tillbaka</button><button type="submit" class="danger-button" data-mutation>Avboka bokningen</button></div></form></dialog>
+</body>
+</html>
