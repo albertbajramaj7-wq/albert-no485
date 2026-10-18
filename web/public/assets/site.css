@@ -33,3 +33,16 @@ footer{background:var(--ink);color:var(--cream);padding:60px 0 25px}.footer-top{
 .booking-honeypot{position:absolute;left:-10000px;width:1px;height:1px;overflow:hidden}
 
 .confirmation-email{font-size:13px;line-height:1.8;padding:16px 18px;background:#e6e9dc;border-left:2px solid #84966b;margin:22px 0;overflow-wrap:anywhere}
+
+/* iPad/iPhone (Safari): knappar ärver sidans färg i stället för systemblått,
+   och datum-/tidsrutor får inte bli bredare än sin plats. */
+button,select,input,textarea{color:inherit;font:inherit}
+button{-webkit-tap-highlight-color:transparent}
+.menu-filters button[aria-pressed=true]{color:var(--cream)}
+input[type=date],input[type=time]{-webkit-appearance:none;appearance:none;display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;background-color:transparent;text-align:left}
+input[type=date]::-webkit-date-and-time-value,input[type=time]::-webkit-date-and-time-value{text-align:left;margin:0}
+input[type=date]::-webkit-calendar-picker-indicator{opacity:.6}
+.booking-page form>*,.booking-page [data-step] *{min-width:0}
+.field-row>.field{min-width:0}
+.field-row .field input,.field-row .field select{height:54px;min-height:54px;padding-top:0;padding-bottom:0;line-height:54px}
+.mode-buttons button[aria-pressed=false]{color:inherit}

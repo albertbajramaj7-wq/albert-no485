@@ -113,3 +113,10 @@
 .stats-chart .bar-booked{fill:#46302a}.stats-chart .bar-dropin{fill:#a19f98}.key.booked::before{background:#46302a}.key.dropin::before{background:#a19f98}
 .admin-app input:focus-visible,.admin-app textarea:focus-visible,.admin-app select:focus-visible{outline-color:#6e5047}
 .admin-checkbox input{accent-color:#46302a}
+/* iPad/iPhone (Safari) */
+.admin-app button,.admin-app select,.admin-app input,.admin-app textarea{color:inherit}
+.admin-primary,.danger-button,.menu-toggle{color:#fff}
+.admin-app input[type=date],.admin-app input[type=time]{-webkit-appearance:none;appearance:none;display:block;width:100%;min-width:0;max-width:100%;box-sizing:border-box;background-color:#fff;text-align:left}
+.admin-app input::-webkit-date-and-time-value{text-align:left;margin:0}
+.config-grid>div,.task-form>div,.waste-form>div,.day-controls>*{min-width:0}
+.day-controls input[type=date]{width:auto;min-width:150px}
