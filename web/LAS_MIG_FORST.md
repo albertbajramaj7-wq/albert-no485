@@ -86,3 +86,4 @@ och gästen ser sin bekräftelse på skärmen.
   (logga in med `albert@albertno485.com` / `lokal-test-123`).
 - All bokningslogik ligger i databasfunktionerna `api_*`. Bara servern får anropa dem.
   Tabellerna har RLS påslaget utan öppna regler, så Supabase publika nyckel kommer inte åt någon data.
+
