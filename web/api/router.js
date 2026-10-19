@@ -17,6 +17,7 @@ async function diagnose() {
     resendKey: !env.RESEND_API_KEY ? 'saknas' : env.RESEND_API_KEY.trim().startsWith('re_') ? 'inlagd' : 'inlagd men börjar inte med re_',
     emailFrom: !env.BOOKING_EMAIL_FROM ? 'saknas' : (emailConfiguration(env).from ? 'ok: ' : 'ogiltig: ') + env.BOOKING_EMAIL_FROM.slice(0, 80),
     emailReplyTo: env.BOOKING_EMAIL_REPLY_TO ? (emailConfiguration(env).replyTo ? 'ok' : 'ogiltig') : 'används inte',
+    aiKey: !env.ANTHROPIC_API_KEY ? 'saknas' : env.ANTHROPIC_API_KEY.trim().startsWith('sk-ant-') ? 'inlagd' : 'inlagd men börjar inte med sk-ant-',
     fortnoxKeys: env.FORTNOX_CLIENT_ID && env.FORTNOX_CLIENT_SECRET ? 'inlagda' : 'saknas',
     vercelEnv: env.VERCEL_ENV || 'okänd',
   };
