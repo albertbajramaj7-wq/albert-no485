@@ -80,6 +80,11 @@ och gästen ser sin bekräftelse på skärmen.
    (hämtning varje natt kl 03 UTC) och `FORTNOX_REDIRECT_URI` om adressen ska vara fast.
 4. Admin → Veckobudget → Koppla Fortnox. Admin läser bara från Fortnox; inget bokförs eller skickas.
 
+## AI-assistent
+Admin → AI-assistent. Kräver `ANTHROPIC_API_KEY` i Vercel (skapas på console.anthropic.com, sätt en
+månadsgräns där). Valfritt `ANTHROPIC_MODEL` (standard: claude-sonnet-5-5). Assistenten läser bara
+sammanställd data via verktyg i `lib/ai.js` – inga gästuppgifter skickas och den kan inte ändra något.
+
 ## För utvecklare
 - Testerna kräver en lokal Postgres (`psql` i PATH): `PGHOST=... PGPORT=... PGUSER=... npm test`
 - Lokal förhandsvisning med låtsas-inloggning: `node tests/dev-server.mjs`, öppna http://localhost:8787

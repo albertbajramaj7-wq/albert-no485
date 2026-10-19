@@ -53,7 +53,7 @@
       const result = await request('day?date=' + encodeURIComponent($('work-date').value));
       if (current !== serial) return;
       data = result; needsRefresh = false; dirty = false;
-      $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(view);
+      $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['ai', 'budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(view);
       $('logout').hidden = false; $('account-button').hidden = false; $('menu-toggle').hidden = false;
       render();
       if (!silent) note('');
@@ -98,18 +98,19 @@
     if (open) document.querySelector('#admin-tabs [aria-current="page"]')?.focus({ preventScroll: true });
   }
   function switchView(value) {
-    if (!['day', 'phone', 'stock', 'purchase', 'tasks', 'history', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) || (['budget', 'stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
+    if (!['day', 'phone', 'stock', 'purchase', 'tasks', 'history', 'ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) || (['ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
     view = value;
     document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== value);
     document.querySelectorAll('[data-view]').forEach(b => { if (b.dataset.view === value) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', stock: 'Lager', purchase: 'Inköp', tasks: 'Arbetsuppgifter', history: 'Historik', budget: 'Veckobudget', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
-    const ownPage = ['budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(value);
+    $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', stock: 'Lager', purchase: 'Inköp', tasks: 'Arbetsuppgifter', history: 'Historik', ai: 'AI-assistent', budget: 'Veckobudget', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
+    const ownPage = ['ai', 'budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(value);
     $('day-controls').hidden = ownPage; $('day-label').hidden = ownPage;
     note('');
     if (value === 'phone') loadPhone();
     if (value === 'stock') loadStock();
     if (value === 'purchase') loadPurchase();
     if (value === 'budget') loadBudget();
+    if (value === 'ai') loadAi();
     if (value === 'stats') loadStats();
     if (value === 'menu') loadMenu();
     if (value === 'staff') loadStaff();
@@ -279,7 +280,7 @@
     $('prepared').value = data.day.prepared === null ? '' : data.day.prepared; $('paused').checked = !!data.day.paused; $('after-closing').checked = !!data.day.allow_after_closing;
     $('limits-help').textContent = 'Gäller valt datum. ' + data.limits.slot + ' pizzor per tidslucka, ' + data.limits.hour + ' per timme och ' + data.limits.seats + ' sittplatser.';
     renderBookings(); renderWaste(); renderTasks(); renderHistory(); lock();
-    if (!isAdmin() && ['budget', 'stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
+    if (!isAdmin() && ['ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
     if (view === 'phone') loadPhone();
   }
 
@@ -837,6 +838,55 @@
     let n = 0; document.querySelectorAll('.budget-actual').forEach(i => { if (!i.value && i.dataset.fortnox) { i.value = fmtInput(Number(i.dataset.fortnox)); n++; } });
     note(n ? n + ' belopp är ifyllda från Fortnox. Kontrollera och tryck Spara veckan.' : 'Inga tomma rutor att fylla i.', !!n);
   });
+
+
+  // ---------- AI-assistent ----------
+  const aiMessages = []; let aiBusy = false, aiChecked = false;
+  async function loadAi() {
+    renderAi();
+    if (!aiChecked) { try { const r = await request('ai'); aiChecked = true; $('ai-setup').hidden = !!r.configured; } catch { /* visas vid fråga */ } }
+    $('ai-input').focus({ preventScroll: true });
+  }
+  function aiText(parent, text) {
+    // Enkel formatering: **fet**, rader som börjar med "- " blir punkter.
+    let list = null;
+    for (const line of text.split('\n')) {
+      const item = /^\s*[-•*]\s+/.test(line), target = el(item ? 'li' : 'p');
+      line.replace(/^\s*[-•*]\s+/, '').split(/(\*\*[^*]+\*\*)/).forEach(part => {
+        if (/^\*\*[^*]+\*\*$/.test(part)) target.append(el('strong', part.slice(2, -2))); else if (part) target.append(document.createTextNode(part));
+      });
+      if (item) { if (!list) { list = el('ul'); parent.append(list); } list.append(target); }
+      else { list = null; if (line.trim()) parent.append(target); }
+    }
+  }
+  function renderAi() {
+    const log = $('ai-log'); log.replaceChildren();
+    if (!aiMessages.length) log.append(el('p', 'Fråga om försäljning, bokningar, svinn, lager eller veckobudgeten. Assistenten hämtar siffrorna själv.', 'muted ai-empty'));
+    aiMessages.forEach(m => { const b = el('div', undefined, 'ai-msg ' + m.role); if (m.role === 'assistant') aiText(b, m.content); else b.textContent = m.content; if (m.error) b.classList.add('error'); log.append(b); });
+    if (aiBusy) log.append(el('div', 'Tänker och hämtar siffror …', 'ai-msg assistant thinking'));
+    $('ai-send').disabled = aiBusy; $('ai-suggest').hidden = aiMessages.length > 0;
+    log.scrollTop = log.scrollHeight;
+  }
+  async function askAi(text) {
+    text = text.trim(); if (!text || aiBusy) return;
+    aiMessages.push({ role: 'user', content: text }); aiBusy = true; $('ai-input').value = ''; renderAi();
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), 70000);
+    try {
+      const history = aiMessages.filter(m => !m.error).map(m => ({ role: m.role, content: m.content }));
+      const response = await fetch('/api/admin/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: history }), credentials: 'same-origin', cache: 'no-store', signal: controller.signal });
+      const result = await response.json().catch(() => ({}));
+      if (response.status === 401) { showLogin('Du har loggats ut. Logga in igen.'); return; }
+      if (!response.ok) throw new Error(result.error || 'AI-assistenten svarade inte.');
+      aiMessages.push({ role: 'assistant', content: result.reply });
+    } catch (error) {
+      aiMessages.push({ role: 'assistant', content: error.name === 'AbortError' ? 'Det tog för lång tid. Försök med en enklare fråga.' : error.message, error: true });
+      if (/ANTHROPIC_API_KEY/.test(error.message)) $('ai-setup').hidden = false;
+    } finally { clearTimeout(timer); aiBusy = false; renderAi(); }
+  }
+  $('ai-form').addEventListener('submit', event => { event.preventDefault(); askAi($('ai-input').value); });
+  $('ai-input').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); askAi($('ai-input').value); } });
+  document.querySelectorAll('[data-ai-q]').forEach(b => b.addEventListener('click', () => askAi(b.dataset.aiQ)));
+  $('ai-clear').addEventListener('click', () => { aiMessages.length = 0; renderAi(); });
 
   // ---------- Händelser ----------
   document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { switchView(b.dataset.view); drawer(false); window.scrollTo(0, 0); }));

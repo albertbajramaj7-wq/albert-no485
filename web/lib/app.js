@@ -3,6 +3,7 @@
 import { AppError } from './supabase.js';
 import { emailConfiguration, sendBookingEmail } from './email.js';
 import { BudgetError, computeBudget, normalizeSettings, normalizeWeek } from './budget.js';
+import { askAi, aiConfig } from './ai.js';
 import { authorizeUrl, completeConnect, fortnoxConfig, fortnoxSummary, randomState, syncFortnox } from './fortnox.js';
 
 const AT = 'alb_at', RT = 'alb_rt';
@@ -71,10 +72,10 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         const origin = request.headers.get('origin');
         if ((origin && !allowedOrigins.has(origin)) || request.headers.get('sec-fetch-site') === 'cross-site') throw new AppError(403, 'Åtgärden måste skickas från hemsidan.');
         if (!request.headers.get('content-type')?.includes('application/json')) throw new AppError(415, 'Använd JSON för den här åtgärden.');
-        if (Number(request.headers.get('content-length') || 0) > 10000) throw new AppError(413, 'För mycket information skickades.');
+        if (Number(request.headers.get('content-length') || 0) > (path === '/api/admin/ai' ? 60000 : 10000)) throw new AppError(413, 'För mycket information skickades.');
       }
       const bodyText = method === 'GET' ? '' : await request.text();
-      if (bodyText.length > 10000) throw new AppError(413, 'För mycket information skickades.');
+      if (bodyText.length > (path === '/api/admin/ai' ? 60000 : 10000)) throw new AppError(413, 'För mycket information skickades.');
       let input = {};
       if (bodyText) { try { input = JSON.parse(bodyText); } catch { throw new AppError(400, 'Informationen kunde inte läsas.'); } }
       if (!input || typeof input !== 'object' || Array.isArray(input)) throw new AppError(400, 'Informationen kunde inte läsas.');
@@ -196,6 +197,12 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         const result = await rpc('api_budget', body);
         const fortnox = fortnoxSummary(await rpc('api_fortnox', { actor, action: 'status' }), env);
         return reply({ ...clean(() => computeBudget(result.settings, result.weeks, result.received)), settingsUpdatedAt: result.settingsUpdatedAt, fortnox });
+      }
+      if (path === '/api/admin/ai') {
+        // Bara ägare och admin. Behörigheten kontrolleras också i varje verktyg (databasen).
+        if (!['owner', 'admin'].includes(s.actor.role)) throw new AppError(403, 'Din roll har inte behörighet till den här funktionen.');
+        if (method === 'GET') return reply({ configured: aiConfig(env).configured });
+        return reply(await askAi({ rpc, actor, actorName: s.actor.name, env, fetcher, now, messages: input.messages }));
       }
       if (path === '/api/admin/fortnox') {
         const summary = async status => fortnoxSummary(status || await rpc('api_fortnox', { actor, action: 'status' }), env);

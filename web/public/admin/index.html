@@ -28,6 +28,7 @@
       <button type="button" data-view="purchase">Inköp</button>
       <button type="button" data-view="history">Historik</button>
       <hr data-role="admin" hidden>
+      <button type="button" data-view="ai" data-role="admin" hidden>AI-assistent</button>
       <button type="button" data-view="budget" data-role="admin" hidden>Veckobudget</button>
       <button type="button" data-view="stats" data-role="admin" hidden>Statistik</button>
       <button type="button" data-view="menu" data-role="admin" hidden>Meny</button>
@@ -157,6 +158,22 @@
         <div id="task-list" class="task-columns"></div>
       </section>
       <section data-panel="history" hidden><section class="admin-card"><div class="section-heading"><h2>Dagens händelser</h2><span class="muted">Senaste 100</span></div><div id="history-list"></div></section></section>
+
+      <section data-panel="ai" hidden>
+        <section class="admin-card ai-card">
+          <div class="section-heading"><div><h2>Fråga AI-restaurangchefen</h2><p class="muted">Läser bara sammanställd data. Ser inga gästuppgifter och kan inte ändra något.</p></div><button type="button" id="ai-clear" class="text-button">Ny konversation</button></div>
+          <div id="ai-setup" class="budget-warnings" hidden>AI-assistenten är inte aktiverad ännu. Skapa en API-nyckel på console.anthropic.com och lägg in den i Vercel som ANTHROPIC_API_KEY.</div>
+          <div id="ai-log" class="ai-log" aria-live="polite"></div>
+          <div id="ai-suggest" class="ai-suggest">
+            <button type="button" class="secondary-button" data-ai-q="Hur gick förra veckan? Jämför bokade pizzor, drop-in och svinn med veckan innan.">Hur gick förra veckan?</button>
+            <button type="button" class="secondary-button" data-ai-q="Hur många pizzor bör jag förbereda på lördag? Utgå från bokningarna och de senaste lördagarna.">Degar till lördag?</button>
+            <button type="button" class="secondary-button" data-ai-q="Vad behöver jag beställa? Titta på lagret och varor under miniminivå.">Vad ska jag beställa?</button>
+            <button type="button" class="secondary-button" data-ai-q="Varför är svinnet som det är den senaste månaden? Dela upp per orsak och pizza.">Svinnet senaste månaden</button>
+            <button type="button" class="secondary-button" data-ai-q="Hur ligger vi till mot veckobudgeten? Vilka poster går över?">Läget mot budget</button>
+          </div>
+          <form id="ai-form" class="ai-form"><label for="ai-input" class="visually-hidden">Din fråga</label><textarea id="ai-input" rows="2" maxlength="2000" placeholder="Skriv din fråga …"></textarea><button type="submit" id="ai-send" class="admin-primary">Skicka</button></form>
+        </section>
+      </section>
 
       <section data-panel="budget" hidden>
         <div class="section-heading budget-heading"><div><h2 id="bud-title">Veckobudget</h2><p class="muted" id="bud-sub">Samma uträkning som ditt budgetark.</p></div>

@@ -10,7 +10,7 @@
     { "path": "/api/cron/fortnox", "schedule": "0 3 * * *" }
   ],
   "functions": {
-    "api/router.js": { "maxDuration": 20 }
+    "api/router.js": { "maxDuration": 60 }
   },
   "headers": [
     {
