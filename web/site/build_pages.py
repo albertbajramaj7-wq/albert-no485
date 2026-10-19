@@ -22,6 +22,7 @@ header=header.replace('href="#"','href="/"').replace('href="#meny"','href="/meny
 footer=links(re.search(r'<footer>.*?</footer>',home,re.S).group())
 footer=footer.replace('href="#" class="logo"','href="/" class="logo"').replace('href="#meny"','href="/meny/"').replace('href="#historia"','href="/historien/"').replace('href="#hantverk">Hantverket','href="/avpn/">AVPN').replace('href="#besok"','href="/#besok"')
 footer=footer.replace('href="#">Till toppen','href="#main">Till toppen')
+footer=footer.replace('<span>Vera Pizza Napoletana · N° 1232</span>','<span>Vera Pizza Napoletana · N° 1232</span><a href="/integritet/">Integritetspolicy</a>',1)
 footer=footer.replace('href="https://www.albertno485.com/admin"','href="/admin/"')
 
 def render(slug,title,description,body,extra_class='',scripts=''):
@@ -63,6 +64,21 @@ avpn+='''<section class="avpn-details"><div class="container principles"><articl
 avpn+='''<section><div class="container avpn-explained"><div><div class="small">Om certifieringen</div><h2>Vad betyder<br>egentligen AVPN?</h2><img class="avpn-original" src="/assets/avpn-transparent.webp" alt="Officiell logga för Vera Pizza Napoletana" width="450" height="243" loading="lazy"></div><div><p>Associazione Verace Pizza Napoletana grundades i Neapel 1984 för att bevara och föra vidare traditionen kring den napolitanska pizzan.</p><p>Föreningens certifiering gäller sättet pizzan görs på. För oss betyder det att hantverket inte stannar vid ett diplom på väggen. Det hör ihop med hur vi arbetar med degen och bakar pizzorna varje dag.</p><p>Albert NO.485 finns med i AVPN:s officiella register. Där kan du se vår restaurang och vårt medlemsnummer.</p><div class="avpn-registration"><dl><div><dt>Restaurang</dt><dd>Albert NO.485</dd></div><div><dt>Medlemsnummer</dt><dd>1232</dd></div><div><dt>Plats</dt><dd>Varberg, Sverige</dd></div></dl><a class="arrow-link" href="https://www.pizzanapoletana.org/en/associati/1573-albert_no485" target="_blank" rel="noopener">Se oss i AVPN:s register</a></div></div></div></section>'''
 avpn+='<figure class="wide-photo"><img src="/assets/hantverk.jpeg" alt="Pizzadegen formas för hand hos Albert" loading="lazy"><figcaption>Traditionen blir till i händerna.</figcaption></figure>'+cta('Hantverket har en historia','Möt Albert vid ugnen.','Boka en tid och kom förbi. Vill du läsa mer om resan hit hittar du den under Vår historia.')
 render('avpn','AVPN-certifierad · Nr 1232','Vera Pizza Napoletana i Varberg. Läs om Albert NO.485:s AVPN-certifiering, medlemsnummer 1232 och vedeldade hantverk.',avpn,'avpn-page')
+
+# Integritetspolicy (GDPR). Uppdatera bolagsnamn/org.nr i FORETAG nedan.
+FORETAG = 'Albert NO.485'
+ORGNR = ''
+legal = f'<section class="legal"><div class="container legal-inner">{crumb("Integritetspolicy")}<div class="small">Senast uppdaterad 19 oktober 2026</div><h1 class="page-title">Integritets&shy;policy</h1>'
+legal += '<p class="page-lead">Så här hanterar vi dina personuppgifter när du bokar hos oss. Kort sagt: vi sparar bara det som behövs för din bokning, vi säljer aldrig uppgifter, och vi tar bort dem automatiskt efter ett år.</p>'
+def sec(title, body): return f'<h2>{title}</h2>{body}'
+legal += sec('Vem ansvarar för dina uppgifter?', f'<p>Personuppgiftsansvarig är {FORETAG}{", org.nr " + ORGNR if ORGNR else ""}, Pilgatan 3, Varberg. Kontakta oss på telefon <a href="tel:+46340-82775">0340–827 75</a> eller besök oss i restaurangen om du har frågor om dina uppgifter.</p>')
+legal += sec('Vilka uppgifter sparar vi?', '<ul><li>Namn, telefonnummer och e-postadress som du fyller i när du bokar.</li><li>Uppgifter om bokningen: datum, tid, antal pizzor, antal gäster och om du äter här eller tar med.</li><li>Om bokningen ändras eller avbokas sparar vi det, och eventuellt en kort anledning.</li></ul><p>Vi sparar inga betalkortsuppgifter, och hemsidan använder inga spårnings- eller reklamcookies.</p>')
+legal += sec('Varför sparar vi dem?', '<ul><li>För att kunna ta emot och genomföra din bokning (avtal).</li><li>För att skicka en bokningsbekräftelse till din e-post.</li><li>För att kunna kontakta dig om något ändras, till exempel om vi måste stänga.</li></ul><p>Vi skickar inga nyhetsbrev eller reklam utan att du uttryckligen har bett om det.</p>')
+legal += sec('Hur länge sparas de?', '<p>Namn, telefonnummer och e-post tas bort automatiskt <strong>12 månader</strong> efter bokningsdagen. Kvar blir bara anonyma siffror, till exempel hur många pizzor som bokades en viss dag, som vi använder för att planera verksamheten.</p>')
+legal += sec('Vem får ta del av uppgifterna?', '<p>Bara vi som arbetar i restaurangen och behöver dem. Vi använder några tjänsteleverantörer som behandlar uppgifterna för vår räkning och enligt avtal:</p><ul><li><strong>Supabase</strong>, databas där bokningarna lagras.</li><li><strong>Vercel</strong>, drift av hemsidan.</li><li><strong>Resend</strong>, utskick av bokningsbekräftelser (skickas från EU).</li></ul><p>Om en leverantör behandlar uppgifter utanför EU/EES sker det med stöd av EU-kommissionens standardavtalsklausuler eller motsvarande skydd. Vi säljer aldrig dina uppgifter.</p>')
+legal += sec('Dina rättigheter', '<p>Du har rätt att få veta vilka uppgifter vi har om dig, att få fel rättade och att få dina uppgifter raderade i förtid. Du kan också invända mot behandlingen. Ring oss på 0340–827 75 så hjälper vi dig.</p><p>Tycker du att vi hanterar dina uppgifter fel kan du lämna klagomål till <a href="https://www.imy.se" rel="noopener">Integritetsskyddsmyndigheten (IMY)</a>.</p>')
+legal += '</div></section>'
+render('integritet','Integritetspolicy','Så hanterar Albert NO.485 dina personuppgifter när du bokar: vad vi sparar, varför, hur länge och dina rättigheter.',legal,'legal-page')
 
 # Keep the approved homepage; route every complete page within the new site.
 h=links(home)

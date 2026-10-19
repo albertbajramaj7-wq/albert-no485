@@ -40,6 +40,23 @@ function stockholmToday(now) {
 export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher = fetch, diagnose }) {
   const ownerEmail = (env.ADMIN_OWNER_EMAIL || '').trim().toLowerCase();
 
+  // Spärr mot för många försök. Bara en hash av IP-adressen används. Saknas funktionen
+  // i databasen (migrering 0006 ej körd) släpps anropet igenom i stället för att stoppa bokningar.
+  async function clientHash(request) {
+    const ip = (request.headers.get('x-forwarded-for') || '').split(',')[0].trim() || request.headers.get('x-real-ip') || 'okand';
+    const salt = String(env.RATE_LIMIT_SALT || env.SUPABASE_SERVICE_ROLE_KEY || 'albert').slice(-24);
+    const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(salt + '|' + ip));
+    return Buffer.from(digest).toString('hex').slice(0, 32);
+  }
+  async function limit(key, max, seconds) {
+    if (env.DISABLE_RATE_LIMIT === '1') return; // bara i automatiska tester
+    try { await rpc('api_rate_limit', { key, max, seconds }); }
+    catch (error) { if (error instanceof AppError && error.status === 429) throw error; console.error('Rate limit check skipped'); }
+  }
+  async function maintenance(force = false) {
+    try { return await rpc('api_maintenance', force ? { force: true } : {}); } catch { return null; }
+  }
+
   async function session(request, url) {
     const secure = !LOCAL.test(url.hostname);
     const jar = parseCookies(request.headers.get('cookie'));
@@ -94,6 +111,9 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         return response;
       }
       if (path === '/api/bookings' && method === 'POST') {
+        const who = await clientHash(request);
+        await limit('book:' + who, 8, 600);      // högst 8 bokningsförsök per 10 min från samma avsändare
+        await limit('book:alla', 150, 600);       // och högst 150 totalt per 10 min
         if (input.website) throw new AppError(400, 'Bokningen kunde inte skickas.');
         if (input.accepted !== true) throw new AppError(400, 'Bekräfta bokningsvillkoren.');
         const key = request.headers.get('idempotency-key') || '';
@@ -107,6 +127,7 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
 
       // ---------- Inloggning ----------
       if (path === '/api/auth/login' && method === 'POST') {
+        await limit('login:' + await clientHash(request), 10, 600);
         const email = String(input.email || '').trim().toLowerCase(), password = String(input.password || '');
         if (!email || !password) throw new AppError(400, 'Skriv e-post och lösenord.');
         const result = await auth.login(email, password);
@@ -132,6 +153,15 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
           return go('/admin/?fortnox=fel&info=' + encodeURIComponent(error instanceof AppError ? error.message : 'Kopplingen misslyckades.'));
         }
       }
+      if (path === '/api/cron/nightly' && method === 'GET') {
+        const secret = String(env.CRON_SECRET || '');
+        if (!secret || request.headers.get('authorization') !== 'Bearer ' + secret) throw new AppError(401, 'Ej behörig.');
+        const result = { maintenance: await maintenance(true) };
+        if (fortnoxConfig(env).configured) {
+          try { result.fortnox = (await syncFortnox({ rpc, env, fetcher, now, by: 'Automatiskt (natt)' })).syncedAt; } catch (error) { result.fortnox = 'fel'; }
+        }
+        return json({ ok: true, ...result });
+      }
       if (path === '/api/cron/fortnox' && method === 'GET') {
         const secret = String(env.CRON_SECRET || '');
         if (!secret || request.headers.get('authorization') !== 'Bearer ' + secret) throw new AppError(401, 'Ej behörig.');
@@ -154,6 +184,7 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         await auth.changeOwnPassword(s.token, password);
         return reply({ ok: true });
       }
+      if (path === '/api/admin/day' && method === 'GET') { await maintenance(); }
       if (path === '/api/admin/day' && method === 'GET') return reply(await withEmail(await rpc('api_admin_day', { actor, date: q('date') || stockholmToday(now()) })));
       if (path === '/api/admin/availability' && method === 'GET') {
         return reply(await rpc('api_availability', { date: q('date'), count: Number(q('count')), mode: q('mode'), guests: Number(q('guests')) }));

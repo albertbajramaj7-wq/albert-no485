@@ -55,3 +55,13 @@ footer{overflow:hidden}
 .hero>.hero-video{position:absolute;inset:0;z-index:-3;width:100%;height:100%;object-fit:cover;object-position:center 55%}
 @media (max-width:760px){.hero>.hero-video{object-position:center center}}
 @media (prefers-reduced-motion:reduce){.hero>.hero-video{display:none}}
+/* Integritetspolicy */
+.legal{padding:150px 0 90px}
+.legal-inner{max-width:760px}
+.legal h2{font-size:clamp(24px,3vw,32px);margin:44px 0 12px;letter-spacing:-.02em}
+.legal p,.legal li{font-size:16px;line-height:1.75;color:var(--ink)}
+.legal ul{padding-left:20px;margin:0 0 12px}
+.legal a{text-decoration:underline;text-underline-offset:3px}
+.legal .page-lead{margin-bottom:10px}
+.footer-bottom a{color:inherit}
+@media(max-width:760px){.legal{padding:70px 0 60px}}

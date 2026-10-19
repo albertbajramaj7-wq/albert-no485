@@ -85,6 +85,16 @@ Admin → AI-assistent. Kräver `ANTHROPIC_API_KEY` i Vercel (skapas på console
 månadsgräns där). Valfritt `ANTHROPIC_MODEL` (standard: claude-sonnet-5-5). Assistenten läser bara
 sammanställd data via verktyg i `lib/ai.js` – inga gästuppgifter skickas och den kan inte ändra något.
 
+## Integritet, spärrar och säkerhetskopior
+- Kör `0006_integritet_skydd.sql`. Bokningar äldre än `retention_days` (standard 365) anonymiseras
+  automatiskt varje natt och när admin öppnas (högst en gång per dygn).
+- Spärr: högst 8 bokningsförsök och 10 inloggningsförsök per 10 minuter per avsändare (bara en hash
+  av IP-adressen sparas, rensas efter ett dygn).
+- Nattjobbet `/api/cron/nightly` kräver `CRON_SECRET` i Vercel.
+- Säkerhetskopia: `.github/workflows/backup.yml` (aktiveras när den finns på `main`). Kräver
+  `SUPABASE_DB_URL` och `BACKUP_PASSPHRASE` som GitHub Actions-hemligheter.
+- Integritetspolicy: `/integritet/`. Fyll i bolagsnamn och org.nr i `site/build_pages.py` (FORETAG, ORGNR).
+
 ## För utvecklare
 - Testerna kräver en lokal Postgres (`psql` i PATH): `PGHOST=... PGPORT=... PGUSER=... npm test`
 - Lokal förhandsvisning med låtsas-inloggning: `node tests/dev-server.mjs`, öppna http://localhost:8787

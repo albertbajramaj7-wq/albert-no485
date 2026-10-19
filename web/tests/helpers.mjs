@@ -83,7 +83,7 @@ export function setup({ env = {}, fetcher } = {}) {
   const clock = { now: '2026-10-18T10:00:00+02:00' }; // söndag förmiddag
   const auth = createFakeAuth();
   const rpc = createTestRpc(db, clock);
-  const app = createApp({ rpc, auth, env: { ADMIN_OWNER_EMAIL: 'albert@albertno485.com', ...env }, now: () => new Date(clock.now), fetcher: fetcher || (async () => { throw new Error('no network in tests'); }) });
+  const app = createApp({ rpc, auth, env: { ADMIN_OWNER_EMAIL: 'albert@albertno485.com', DISABLE_RATE_LIMIT: '1', ...env }, now: () => new Date(clock.now), fetcher: fetcher || (async () => { throw new Error('no network in tests'); }) });
   const base = 'https://albertno485.com';
   async function call(method, path, body, { token, headers = {} } = {}) {
     const h = { ...headers };
