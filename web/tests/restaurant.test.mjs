@@ -161,8 +161,11 @@ test('inställningar ändrar kapaciteten och skyddas mot samtidiga ändringar', 
     lunchLast: v.lunch_last, dinnerFirst: v.dinner_first, dinnerLast: v.dinner_last, avgPizzaPrice: v.avg_pizza_price, wasteCost: v.waste_cost };
   const saved = await t.call('POST', '/api/admin/config', { action: 'save', settings }, { token });
   assert.equal(saved.status, 200, JSON.stringify(saved.body));
+  // En bokning får nu fler pizzor än en tidslucka (de bakas i luckan före), så "kvar" visar största möjliga beställning.
   const av = await t.call('GET', '/api/availability?date=2026-11-04&count=1&mode=away');
-  assert.equal(av.body.slots[0].remaining, 4);
+  assert.equal(av.body.slots[0].remaining, v.max_count);
+  const cfg2 = await t.call('GET', '/api/admin/config', undefined, { token });
+  assert.equal(cfg2.body.slot_cap, 4);
   assert.equal((await t.call('POST', '/api/admin/config', { action: 'save', settings }, { token })).status, 409);
   const bad = await t.call('POST', '/api/admin/config', { action: 'save', settings: { ...settings, version: saved.body.version, lunchLast: 1100 } }, { token });
   assert.equal(bad.status, 400);

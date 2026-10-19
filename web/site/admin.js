@@ -277,7 +277,7 @@
     $('dropin-value').textContent = data.day.dropin; $('waste-value').textContent = data.day.waste;
     $('dropin-manual').value = data.day.dropin; $('waste-manual').value = data.day.waste;
     $('prepared').value = data.day.prepared === null ? '' : data.day.prepared; $('paused').checked = !!data.day.paused; $('after-closing').checked = !!data.day.allow_after_closing;
-    $('limits-help').textContent = 'Gäller valt datum. ' + data.limits.slot + ' pizzor per kvart, ' + data.limits.hour + ' per timme och ' + data.limits.seats + ' sittplatser.';
+    $('limits-help').textContent = 'Gäller valt datum. ' + data.limits.slot + ' pizzor per tidslucka, ' + data.limits.hour + ' per timme och ' + data.limits.seats + ' sittplatser.';
     renderBookings(); renderWaste(); renderTasks(); renderHistory(); lock();
     if (!isAdmin() && ['budget', 'stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
     if (view === 'phone') loadPhone();
@@ -595,11 +595,12 @@
   }
 
   // ---------- Inställningar ----------
-  const cfgFields = ['slotCap', 'hourCap', 'seats', 'sittingMin', 'arrivalMin', 'horizonDays', 'maxCount', 'maxGuests', 'avgPizzaPrice', 'wasteCost'];
-  const cfgColumns = { slotCap: 'slot_cap', hourCap: 'hour_cap', seats: 'seats', sittingMin: 'sitting_min', arrivalMin: 'arrival_min', horizonDays: 'horizon_days', maxCount: 'max_count', maxGuests: 'max_guests', avgPizzaPrice: 'avg_pizza_price', wasteCost: 'waste_cost' };
+  const cfgFields = ['slotCap', 'slotMin', 'hourCap', 'seats', 'sittingMin', 'arrivalMin', 'horizonDays', 'maxCount', 'maxGuests', 'avgPizzaPrice', 'wasteCost'];
+  const cfgColumns = { slotCap: 'slot_cap', slotMin: 'slot_min', hourCap: 'hour_cap', seats: 'seats', sittingMin: 'sitting_min', arrivalMin: 'arrival_min', horizonDays: 'horizon_days', maxCount: 'max_count', maxGuests: 'max_guests', avgPizzaPrice: 'avg_pizza_price', wasteCost: 'waste_cost' };
   async function loadConfig() { const result = await adminCall('config'); if (result) { config = result; renderConfig(); } }
   function renderConfig() {
     cfgFields.forEach(f => { $('cfg-' + f).value = config[cfgColumns[f]]; });
+    $('cfg-sitAfterClose').checked = !!config.sit_after_close;
     ['lunchFirst', 'lunchLast', 'dinnerFirst', 'dinnerLast'].forEach(f => { $('cfg-' + f).value = time(config[f.replace(/[A-Z]/, c => '_' + c.toLowerCase())]); });
     const boxes = $('weekday-boxes'); boxes.replaceChildren();
     weekdays.forEach(([n, label]) => { const l = el('label', undefined, 'admin-checkbox'), c = el('input'); c.type = 'checkbox'; c.value = n; c.checked = config.open_weekdays.includes(n); c.id = 'wd-' + n; l.append(c, document.createTextNode(label)); boxes.append(l); });
@@ -907,7 +908,7 @@
   $('config-form').addEventListener('submit', async event => {
     event.preventDefault(); if (!event.target.reportValidity() || !config) return;
     const settings = { version: config.version, openWeekdays: [...document.querySelectorAll('#weekday-boxes input:checked')].map(c => Number(c.value)) };
-    cfgFields.forEach(f => { settings[f] = Number($('cfg-' + f).value); });
+    cfgFields.forEach(f => { settings[f] = Number($('cfg-' + f).value); }); settings.sitAfterClose = $('cfg-sitAfterClose').checked;
     ['lunchFirst', 'lunchLast', 'dinnerFirst', 'dinnerLast'].forEach(f => { settings[f] = minutes($('cfg-' + f).value); });
     const result = await adminCall('config', { action: 'save', settings }, 'Inställningarna är sparade och gäller direkt för nya bokningar.');
     if (result) { config = result; renderConfig(); }

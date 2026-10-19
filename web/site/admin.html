@@ -229,11 +229,12 @@
               <div><label for="cfg-dinnerFirst">Kväll, första färdigtid</label><input id="cfg-dinnerFirst" type="time" step="900" required></div>
               <div><label for="cfg-dinnerLast">Kväll, sista färdigtid</label><input id="cfg-dinnerLast" type="time" step="900" required></div>
             </div>
-            <p class="field-help">Sista färdigtiden är också när sittningen senast ska vara slut, om inte sena sittningar tillåts för dagen.</p>
+            <p class="field-help">Sista färdigtiden är också när sittningen senast ska vara slut, om inte gäster får sitta kvar efter stängning (se Kapacitet) eller sena sittningar tillåts för dagen.</p>
           </section>
           <section class="admin-card"><h2>Kapacitet</h2>
             <div class="config-grid">
-              <div><label for="cfg-slotCap">Pizzor per kvart</label><input id="cfg-slotCap" type="number" min="1" max="100" required></div>
+              <div><label for="cfg-slotCap">Pizzor per tidslucka</label><input id="cfg-slotCap" type="number" min="1" max="100" required></div>
+              <div><label for="cfg-slotMin">Minuter per tidslucka</label><input id="cfg-slotMin" type="number" min="5" max="60" required></div>
               <div><label for="cfg-hourCap">Pizzor per timme</label><input id="cfg-hourCap" type="number" min="1" max="500" required></div>
               <div><label for="cfg-seats">Sittplatser</label><input id="cfg-seats" type="number" min="0" max="500" required></div>
               <div><label for="cfg-sittingMin">Sittning (minuter)</label><input id="cfg-sittingMin" type="number" min="15" max="240" required></div>
@@ -242,6 +243,8 @@
               <div><label for="cfg-maxCount">Flest pizzor per bokning</label><input id="cfg-maxCount" type="number" min="1" max="50" required></div>
               <div><label for="cfg-maxGuests">Flest gäster per bokning</label><input id="cfg-maxGuests" type="number" min="1" max="500" required></div>
             </div>
+            <label class="admin-checkbox cfg-after"><input type="checkbox" id="cfg-sitAfterClose">Gäster får sitta kvar efter stängning</label>
+            <p class="field-help">Ugnen: så många pizzor blir klara per tidslucka. Större beställningar bakas i luckorna strax före färdigtiden.</p>
           </section>
           <section class="admin-card"><h2>Ekonomi</h2>
             <div class="config-grid">
