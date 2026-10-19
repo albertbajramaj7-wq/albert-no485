@@ -57,6 +57,7 @@
       $('logout').hidden = false; $('account-button').hidden = false; $('menu-toggle').hidden = false;
       render();
       if (!silent) note('');
+      if (pendingView && isAdmin()) { const v = pendingView, msg = pendingNote; pendingView = null; pendingNote = null; switchView(v); if (msg) setTimeout(() => note(msg[0], msg[1]), 600); }
     } catch (error) {
       if (current !== serial) return;
       if ([401, 403].includes(error.status)) showLogin(error.status === 403 ? error.message : '');
@@ -610,7 +611,7 @@
 
 
   // ---------- Veckobudget ----------
-  let budget, budWeek;
+  let budget, budWeek, pendingView = null, pendingNote = null;
   const krd = n => n === null || n === undefined ? '–' : (Math.round(n * 100) / 100).toLocaleString('sv-SE', { minimumFractionDigits: 0, maximumFractionDigits: 2 }) + ' kr';
   const krw = n => n === null || n === undefined ? '–' : Math.round(n).toLocaleString('sv-SE') + ' kr';
   const parseNum = v => { const t = String(v ?? '').replace(/\s/g, '').replace(',', '.'); if (t === '') return null; const n = Number(t); return Number.isFinite(n) ? n : NaN; };
@@ -624,7 +625,7 @@
   function figure(label, value, sub, strongClass) { const d = el('div'), s = el('strong', value); if (strongClass) s.className = strongClass; d.append(el('span', label), s, el('small', sub || '')); return d; }
   function renderBudget() {
     if (!budget) return;
-    const s = budget.settings, w = budgetPreview();
+    const s = budget.settings, w = budgetPreview(), fx = budget.fortnox, sug = fx?.suggestions?.[budWeek] || {};
     // Veckoväljaren: sparade veckor + vald vecka + innevarande.
     const set = new Set(budget.weeks.map(x => x.weekStart)); set.add(budWeek); set.add(mondayOf(today()));
     const sel = $('bud-week'); sel.replaceChildren();
@@ -643,13 +644,15 @@
       figure('Saldo efter veckan', w ? krw(w.balanceOut) : krw(lastBalance()), 'Ingående ' + (w ? krw(w.balanceIn) : krw(lastBalance()))),
       figure('Fritt saldo', w ? krw(w.free) : '–', 'Efter pengar kvar i kostnadspotter'),
       figure('Varuinköp av omsättning', w?.goodsPct === null || w?.goodsPct === undefined ? '–' : w.goodsPct.toLocaleString('sv-SE') + ' %', 'Budget ' + Math.round(s.pct.goods * 1000) / 10 + ' %'),
-      figure('Momsreserv', w?.computed ? krw(w.vatReserve) : '–', 'Hela försäljningsmomsen'));
+      fx?.bankBalance !== null && fx?.bankBalance !== undefined
+        ? figure('Banksaldo (Fortnox)', krw(fx.bankBalance), w ? 'Skillnad mot budgetsaldo ' + krw(fx.bankBalance - w.balanceOut) : 'Konto ' + fx.bankAccount)
+        : figure('Momsreserv', w?.computed ? krw(w.vatReserve) : '–', 'Hela försäljningsmomsen'));
     // Formulär
     $('bud-revenue-label').textContent = s.reportBasis === 'inkl' ? 'Omsättning inkl moms (kr)' : 'Omsättning ex moms (kr)';
     $('bud-revenue').value = fmtInput(w?.input.revenue); $('bud-vat').value = fmtInput(w?.input.salesVat);
     $('bud-card').value = fmtInput(w?.input.cardAmount); $('bud-cardcount').value = fmtInput(w?.input.cardCount);
     $('bud-kind').value = w?.kind || 'actual'; $('bud-note').value = w?.note || '';
-    $('bud-sources').textContent = 'Fortnox och Caspeco är inte kopplade ännu. Tills dess fyller du i siffrorna här.' + (w?.received ? ' Mottagna leveranser i admin den här veckan: ' + krd(w.received) + ' ex moms.' : '');
+    $('bud-sources').textContent = (fx?.connected ? 'Fortnox är kopplat' + (fx.syncedAt ? ', senast hämtat ' + new Date(fx.syncedAt).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }) : '') + '. Leverantörsfakturor visas som förslag under Faktiskt använt. Caspeco är inte kopplat ännu, så omsättningen fyller du i här.' : 'Fortnox och Caspeco är inte kopplade ännu. Tills dess fyller du i siffrorna här.') + (w?.received ? ' Mottagna leveranser i admin den här veckan: ' + krd(w.received) + ' ex moms.' : '');
     // Tabell
     const table = $('bud-table'); table.replaceChildren();
     const head = el('tr'); ['Post', 'Beräknas på', 'Sätt undan', 'Från förra veckan', 'Att använda', 'Faktiskt använt', 'Till nästa vecka', 'Status'].forEach(h => head.append(el('th', h)));
@@ -660,7 +663,8 @@
       const tr = el('tr'); if (p.missing) tr.className = 'budget-missing';
       const input = el('input'); input.inputMode = 'decimal'; input.className = 'budget-actual'; input.dataset.key = p.key; input.autocomplete = 'off';
       input.value = fmtInput(w?.actuals?.[p.key]); input.setAttribute('aria-label', 'Faktiskt använt för ' + p.name);
-      if (p.key === 'goods' && w?.received) input.placeholder = 'Leveranser ' + Math.round(w.received * (1 + s.purchaseVat.goods));
+      if (sug[p.key] !== undefined) { input.placeholder = 'Fortnox ' + Math.round(sug[p.key]).toLocaleString('sv-SE'); input.dataset.fortnox = sug[p.key]; }
+      else if (p.key === 'goods' && w?.received) input.placeholder = 'Leveranser ' + Math.round(w.received * (1 + s.purchaseVat.goods));
       const actualCell = el('td'); actualCell.append(input);
       const status = el('td', p.status || ''); if (p.status === 'Över budget') status.className = 'negative'; else if (p.status === 'Inom budget') status.className = 'positive';
       tr.append(el('th', p.name), el('td', p.basis || ''), el('td', p.budget === undefined ? '–' : krd(p.budget)), el('td', p.in === undefined ? '–' : krd(p.in)), el('td', p.available === undefined ? '–' : krd(p.available)), actualCell, el('td', p.out === undefined ? '–' : krd(p.out)), status);
@@ -671,7 +675,8 @@
       extra('Buffert', w.buffer); extra('Momsreserv', w.vatReserve); extra('Summa avsättningar', w.reserve);
     }
     table.append(body);
-    renderBudgetYear(); renderBudgetSettings();
+    $('bud-fill-fortnox').hidden = !Object.keys(sug).length;
+    renderBudgetYear(); renderBudgetSettings(); renderFortnox();
   }
   const lastBalance = () => { const before = budget.weeks.filter(x => x.weekStart < budWeek); return before.length ? before[before.length - 1].balanceOut : budget.settings.startBalance; };
   function renderBudgetYear() {
@@ -777,6 +782,61 @@
       ...budget.weeks.map(w => [w.week, w.weekStart, w.kind === 'example' ? 'Exempel' : 'Faktisk', w.revenueEx ?? '', w.salesVat ?? '', w.salesInkl ?? '', w.reserve ?? '', w.left ?? '', w.plusMinus ?? '', w.balanceOut, w.free, w.status].map(v => typeof v === 'number' ? String(v).replace('.', ',') : v))]);
   });
 
+
+  // ---------- Fortnox ----------
+  function budgetPosts() { return [['goods', 'Varuinköp'], ['fuel', 'Drivmedel'], ['staff', 'Personal, total kostnad'], ['other', 'Övrig löpande drift'], ...budget.fixed.map(f => [f.key, f.name]), ['card', 'Kortavgift']]; }
+  function renderFortnox() {
+    const f = budget.fortnox, body = $('fx-body'); body.replaceChildren();
+    const when = t => t ? new Date(t).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }) : '';
+    if (!f?.configured) {
+      $('fx-state').textContent = 'Inte kopplat';
+      body.append(el('p', 'Fortnox-nycklarna finns inte i Vercel ännu. Lägg in FORTNOX_CLIENT_ID och FORTNOX_CLIENT_SECRET under Settings → Environment Variables, gör en ny deploy och kom tillbaka hit.', 'muted'));
+      return;
+    }
+    if (!f.connected) {
+      $('fx-state').textContent = 'Inte kopplat';
+      body.append(el('p', 'Admin läser banksaldo och leverantörsfakturor från Fortnox. Inget skickas eller bokförs i Fortnox.', 'muted'));
+      body.append(button('Koppla Fortnox', 'admin-primary', async () => { const r = await adminCall('fortnox', { action: 'connect' }); if (r?.url) window.location.href = r.url; }));
+      return;
+    }
+    $('fx-state').textContent = 'Kopplat' + (f.companyName ? ' till ' + f.companyName : '');
+    const info = el('p', (f.syncedAt ? 'Senast hämtat ' + when(f.syncedAt) + (f.syncedBy ? ' (' + f.syncedBy + ')' : '') : 'Inte hämtat ännu') + '. Hämtas automatiskt varje natt.', 'muted');
+    body.append(info);
+    if (f.lastError) body.append(el('p', 'Senaste försöket misslyckades: ' + f.lastError, 'budget-warnings'));
+    const actions = el('div', undefined, 'fx-actions');
+    actions.append(button('Hämta nu', 'admin-primary', async () => { const r = await adminCall('fortnox', { action: 'sync' }, 'Uppdaterat från Fortnox.'); if (r) { budget.fortnox = r; renderBudget(); } }),
+      button('Koppla från', 'text-button', async () => { if (!confirm('Koppla från Fortnox? Redan hämtade siffror finns kvar.')) return; const r = await adminCall('fortnox', { action: 'disconnect' }, 'Fortnox är frånkopplat.'); if (r) { budget.fortnox = r; renderBudget(); } }));
+    body.append(actions);
+    const sec = el('div', undefined, 'budget-group');
+    sec.append(el('h3', 'Leverantörer → budgetpost'), el('p', 'Välj vilken post varje leverantörs fakturor hör till. Då föreslås beloppen automatiskt under Faktiskt använt. Senaste 120 dagarna.', 'muted'));
+    const g = el('div', undefined, 'config-grid'), bl = el('div'), lab = el('label', 'Bankkonto i bokföringen'), acc = el('input'); lab.htmlFor = 'fx-bank'; acc.id = 'fx-bank'; acc.inputMode = 'numeric'; acc.value = f.bankAccount; bl.append(lab, acc); g.append(bl); sec.append(g);
+    if (!f.suppliers.length) sec.append(el('p', 'Inga leverantörsfakturor hittades.', 'muted'));
+    else {
+      const wrap = el('div', undefined, 'table-scroll'), t = el('table', undefined, 'data-table fx-map'); wrap.append(t);
+      const h = el('tr'); ['Leverantör', 'Fakturor', 'Summa inkl moms', 'Budgetpost'].forEach(x => h.append(el('th', x))); t.append(el('thead')); t.tHead.append(h);
+      const b = el('tbody');
+      f.suppliers.forEach(sp => {
+        const tr = el('tr'), sel = el('select'); sel.dataset.supplier = sp.number; sel.setAttribute('aria-label', 'Budgetpost för ' + sp.name);
+        [['', '– Ingen –'], ...budgetPosts()].forEach(([k, n]) => { const o = el('option', n); o.value = k; o.selected = (f.supplierMap[sp.number] || '') === k; sel.append(o); });
+        const td = el('td'); td.append(sel);
+        tr.append(el('th', sp.name || 'Leverantör ' + sp.number), el('td', String(sp.count)), el('td', krd(sp.total)), td); b.append(tr);
+      });
+      t.append(b); sec.append(wrap);
+    }
+    const save = el('div', undefined, 'budget-actions');
+    save.append(button('Spara kopplingar', 'admin-primary', async () => {
+      const supplierMap = {}; document.querySelectorAll('.fx-map select').forEach(x => { if (x.value) supplierMap[x.dataset.supplier] = x.value; });
+      const bankAccount = parseNum($('fx-bank').value);
+      if (!Number.isInteger(bankAccount)) { note('Skriv ett giltigt kontonummer, till exempel 1930.'); return; }
+      const r = await adminCall('fortnox', { action: 'save_map', supplierMap, bankAccount }, 'Kopplingarna är sparade.'); if (r) { budget.fortnox = r; renderBudget(); }
+    }));
+    sec.append(save); body.append(sec);
+  }
+  $('bud-fill-fortnox').addEventListener('click', () => {
+    let n = 0; document.querySelectorAll('.budget-actual').forEach(i => { if (!i.value && i.dataset.fortnox) { i.value = fmtInput(Number(i.dataset.fortnox)); n++; } });
+    note(n ? n + ' belopp är ifyllda från Fortnox. Kontrollera och tryck Spara veckan.' : 'Inga tomma rutor att fylla i.', !!n);
+  });
+
   // ---------- Händelser ----------
   document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { switchView(b.dataset.view); drawer(false); window.scrollTo(0, 0); }));
   $('menu-toggle').addEventListener('click', () => drawer(!document.body.classList.contains('drawer-open')));
@@ -873,6 +933,12 @@
     catch (error) { $('account-description').textContent = error.message; }
   });
   setInterval(() => { if (data && view !== 'config' && view !== 'menu' && view !== 'staff' && view !== 'stock' && view !== 'purchase' && !busy && !fetching && !dirty && !needsRefresh && !document.hidden && !document.querySelector('dialog[open]') && !document.querySelector('.task-edit[open]') && !['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) load(true); }, 30000);
+  const fortnoxReturn = new URLSearchParams(location.search).get('fortnox');
+  if (fortnoxReturn) {
+    pendingView = 'budget';
+    pendingNote = { kopplat: ['Fortnox är kopplat. Välj nedan vilken budgetpost varje leverantör hör till.', true], avbrutet: ['Kopplingen till Fortnox avbröts.', false], fel: ['Fortnox kunde inte kopplas: ' + (new URLSearchParams(location.search).get('info') || 'okänt fel'), false] }[fortnoxReturn] || null;
+    history.replaceState(null, '', location.pathname);
+  }
   switchView(view);
   load();
 })();

@@ -72,6 +72,14 @@ Fungerar som i ChatGPT:s version via Resend. Lägg in `RESEND_API_KEY`, `BOOKING
 och eventuellt `BOOKING_EMAIL_REPLY_TO` i Vercel. Utan dem sparas bokningar som vanligt,
 och gästen ser sin bekräftelse på skärmen.
 
+## Veckobudget och Fortnox
+1. Kör `supabase/migrations/0003_veckobudget.sql` och `0004_fortnox.sql` i Supabase SQL Editor (i den ordningen).
+2. Skapa en integration i Fortnox utvecklarportal med behörigheterna Bookkeeping, Supplier,
+   Supplier Invoice, Article och Company Information. Redirect URI: `https://<din-adress>/api/fortnox/callback`.
+3. Lägg in `FORTNOX_CLIENT_ID` och `FORTNOX_CLIENT_SECRET` i Vercel. Valfritt: `CRON_SECRET`
+   (hämtning varje natt kl 03 UTC) och `FORTNOX_REDIRECT_URI` om adressen ska vara fast.
+4. Admin → Veckobudget → Koppla Fortnox. Admin läser bara från Fortnox; inget bokförs eller skickas.
+
 ## För utvecklare
 - Testerna kräver en lokal Postgres (`psql` i PATH): `PGHOST=... PGPORT=... PGUSER=... npm test`
 - Lokal förhandsvisning med låtsas-inloggning: `node tests/dev-server.mjs`, öppna http://localhost:8787

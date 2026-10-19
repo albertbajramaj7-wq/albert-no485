@@ -3,6 +3,7 @@
 import { AppError } from './supabase.js';
 import { emailConfiguration, sendBookingEmail } from './email.js';
 import { BudgetError, computeBudget, normalizeSettings, normalizeWeek } from './budget.js';
+import { authorizeUrl, completeConnect, fortnoxConfig, fortnoxSummary, randomState, syncFortnox } from './fortnox.js';
 
 const AT = 'alb_at', RT = 'alb_rt';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -118,6 +119,25 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         return json({ ok: true }, 200, [cookie(AT, '', 0, secure), cookie(RT, '', 0, secure)]);
       }
 
+      // ---------- Fortnox: tillbaka efter godkännande, och nattlig hämtning ----------
+      if (path === '/api/fortnox/callback' && method === 'GET') {
+        const go = target => new Response(null, { status: 302, headers: { Location: target, 'Cache-Control': 'no-store' } });
+        if (q('error')) return go('/admin/?fortnox=avbrutet');
+        try {
+          await completeConnect({ rpc, env, fetcher, now, code: q('code'), state: q('state') });
+          try { await syncFortnox({ rpc, env, fetcher, now, by: 'Vid koppling' }); } catch { /* visas i admin */ }
+          return go('/admin/?fortnox=kopplat');
+        } catch (error) {
+          return go('/admin/?fortnox=fel&info=' + encodeURIComponent(error instanceof AppError ? error.message : 'Kopplingen misslyckades.'));
+        }
+      }
+      if (path === '/api/cron/fortnox' && method === 'GET') {
+        const secret = String(env.CRON_SECRET || '');
+        if (!secret || request.headers.get('authorization') !== 'Bearer ' + secret) throw new AppError(401, 'Ej behörig.');
+        const status = await syncFortnox({ rpc, env, fetcher, now, by: 'Automatiskt (natt)' });
+        return json({ ok: true, syncedAt: status.syncedAt });
+      }
+
       if (!path.startsWith('/api/admin/') && path !== '/api/auth/password') throw new AppError(404, 'Sidan finns inte.');
 
       // ---------- Kräver inloggning ----------
@@ -174,7 +194,25 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
           body = { actor, action: 'save_week', week: clean(() => normalizeWeek(input.week, normalizeSettings(current.settings))) };
         } else if (method === 'POST') throw new AppError(400, 'Okänd åtgärd.');
         const result = await rpc('api_budget', body);
-        return reply({ ...clean(() => computeBudget(result.settings, result.weeks, result.received)), settingsUpdatedAt: result.settingsUpdatedAt });
+        const fortnox = fortnoxSummary(await rpc('api_fortnox', { actor, action: 'status' }), env);
+        return reply({ ...clean(() => computeBudget(result.settings, result.weeks, result.received)), settingsUpdatedAt: result.settingsUpdatedAt, fortnox });
+      }
+      if (path === '/api/admin/fortnox') {
+        const summary = async status => fortnoxSummary(status || await rpc('api_fortnox', { actor, action: 'status' }), env);
+        if (method === 'GET') return reply(await summary());
+        if (input.action === 'connect') {
+          const cfg = fortnoxConfig(env);
+          if (!cfg.configured) throw new AppError(409, 'Lägg först in FORTNOX_CLIENT_ID och FORTNOX_CLIENT_SECRET i Vercel och gör en ny deploy.');
+          const origin = request.headers.get('origin');
+          const base = env.FORTNOX_REDIRECT_URI || ((origin && allowedOrigins.has(origin) ? origin : (env.APP_ORIGIN || url.origin)) + '/api/fortnox/callback');
+          const state = randomState();
+          await rpc('api_fortnox', { actor, action: 'start', state, redirectUri: base });
+          return reply({ url: authorizeUrl(cfg, base, state), redirectUri: base });
+        }
+        if (input.action === 'sync') { await rpc('api_fortnox', { actor, action: 'status' }); return reply(await summary(await syncFortnox({ rpc, env, fetcher, now, by: s.actor.name }))); }
+        if (input.action === 'save_map') return reply(await summary(await rpc('api_fortnox', { actor, action: 'save_map', supplierMap: input.supplierMap, bankAccount: input.bankAccount })));
+        if (input.action === 'disconnect') return reply(await summary(await rpc('api_fortnox', { actor, action: 'disconnect' })));
+        throw new AppError(400, 'Okänd åtgärd.');
       }
       if (path === '/api/admin/menu') return reply(await rpc('api_admin_menu', method === 'GET' ? { actor } : { actor, action: 'save', item: input.item }));
       if (path === '/api/admin/config') return reply(await rpc('api_admin_settings', method === 'GET' ? { actor, action: 'get' } : { ...input, actor }));

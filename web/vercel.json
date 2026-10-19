@@ -6,6 +6,9 @@
   "rewrites": [
     { "source": "/api/:path*", "destination": "/api/router?path=:path*" }
   ],
+  "crons": [
+    { "path": "/api/cron/fortnox", "schedule": "0 3 * * *" }
+  ],
   "functions": {
     "api/router.js": { "maxDuration": 20 }
   },
