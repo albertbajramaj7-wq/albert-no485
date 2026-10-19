@@ -45,3 +45,8 @@ h1 span{color:var(--sand)}
 .booking-form input:focus,.booking-form select:focus{outline-color:var(--brown-soft)}
 .booking-error{border-left-color:var(--brown);background:#efe6dc}
 header .pill{background:var(--cream);color:var(--brown);border-color:var(--cream)}header .pill:hover{background:var(--sand);border-color:var(--sand)}
+/* Inget sidledsscroll på mobil: stora ALBERT-texten i sidfoten får inte sticka ut */
+html,body{overflow-x:clip}
+footer{overflow:hidden}
+.footer-word{max-width:100%;overflow:hidden}
+@media(max-width:760px){.footer-word{font-size:11.2vw;letter-spacing:-.06em}}
