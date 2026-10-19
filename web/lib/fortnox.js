@@ -93,10 +93,10 @@ export async function syncFortnox({ rpc, env, fetcher, now = () => new Date(), b
   try {
     const { token, bankAccount } = await accessToken({ rpc, env, fetcher, now });
     const today = day(now());
-    const years = await api(fetcher, token, '/financialyears?date=' + today);
+    // Enligt Fortnox OpenAPI: /3/financialyears?Date=ÅÅÅÅ-MM-DD. Saknas året används financialyeardate direkt.
+    const years = await api(fetcher, token, '/financialyears?Date=' + today);
     const year = years?.FinancialYears?.[0]?.Id;
-    if (!year) throw new AppError(502, 'Hittar inget räkenskapsår i Fortnox för i dag.');
-    const account = await api(fetcher, token, '/accounts/' + bankAccount + '?financialyear=' + year);
+    const account = await api(fetcher, token, '/accounts/' + bankAccount + (year ? '?financialyear=' + year : '?financialyeardate=' + today));
     const bankBalance = money(account?.Account?.BalanceCarriedForward);
     const from = day(new Date(now().getTime() - 120 * 864e5));
     const invoices = [];
