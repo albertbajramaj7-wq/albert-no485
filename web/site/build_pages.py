@@ -65,7 +65,7 @@ avpn+='''<section><div class="container avpn-explained"><div><div class="small">
 avpn+='<figure class="wide-photo"><img src="/assets/hantverk.jpeg" alt="Pizzadegen formas för hand hos Albert" loading="lazy"><figcaption>Traditionen blir till i händerna.</figcaption></figure>'+cta('Hantverket har en historia','Möt Albert vid ugnen.','Boka en tid och kom förbi. Vill du läsa mer om resan hit hittar du den under Vår historia.')
 render('avpn','AVPN-certifierad · Nr 1232','Vera Pizza Napoletana i Varberg. Läs om Albert NO.485:s AVPN-certifiering, medlemsnummer 1232 och vedeldade hantverk.',avpn,'avpn-page')
 
-# Integritetspolicy (GDPR). Uppdatera bolagsnamn/org.nr i FORETAG nedan.
+# Integritetspolicy (GDPR). Albert vill inte visa bolagsnamn och org.nr – lämna ORGNR tomt.
 FORETAG = 'Albert NO.485'
 ORGNR = ''
 legal = f'<section class="legal"><div class="container legal-inner">{crumb("Integritetspolicy")}<div class="small">Senast uppdaterad 19 oktober 2026</div><h1 class="page-title">Integritets&shy;policy</h1>'

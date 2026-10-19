@@ -93,7 +93,7 @@ sammanställd data via verktyg i `lib/ai.js` – inga gästuppgifter skickas och
 - Nattjobbet `/api/cron/nightly` kräver `CRON_SECRET` i Vercel.
 - Säkerhetskopia: `.github/workflows/backup.yml` (aktiveras när den finns på `main`). Kräver
   `SUPABASE_DB_URL` och `BACKUP_PASSPHRASE` som GitHub Actions-hemligheter.
-- Integritetspolicy: `/integritet/`. Fyll i bolagsnamn och org.nr i `site/build_pages.py` (FORETAG, ORGNR).
+- Integritetspolicy: `/integritet/`. Visar "Albert NO.485", adress och telefon (bolagsnamn och org.nr visas inte, enligt Albert).
 
 ## För utvecklare
 - Testerna kräver en lokal Postgres (`psql` i PATH): `PGHOST=... PGPORT=... PGUSER=... npm test`
