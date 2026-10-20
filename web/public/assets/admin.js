@@ -142,7 +142,7 @@
     b.addEventListener('click', () => {
       if (action === 'cancel') {
         cancelId = row.id; $('cancel-description').textContent = row.name + ' · ' + time(row.ready_min) + ' · ' + row.count + ' pizzor'; $('cancel-reason').value = ''; $('cancel-dialog').showModal(); $('cancel-reason').focus();
-      } else mutate('booking', { id: row.id, action }, { checkin: 'Gästen är incheckad.', finish: 'Bokningen är avslutad.', undo_checkin: 'Incheckningen är ångrad.' }[action]);
+      } else mutate('booking', { id: row.id, action }, { checkin: 'Gästen är incheckad.', finish: 'Bokningen är avslutad.', undo_checkin: 'Incheckningen är ångrad.', undo_finish: 'Avslutet är ångrat.' }[action]);
     });
     return b;
   }
@@ -166,7 +166,8 @@
       const actions = el('div', undefined, 'booking-actions-list');
       if (row.status === 'confirmed') actions.append(bookingAction('Checka in', 'checkin', row, 'admin-primary'));
       if (row.status === 'checked_in') actions.append(bookingAction('Avsluta besöket', 'finish', row, 'admin-primary'), bookingAction('Ångra incheckning', 'undo_checkin', row, 'text-button'));
-      if (['confirmed', 'checked_in'].includes(row.status)) actions.append(bookingAction('Avboka', 'cancel', row, 'secondary-button'));
+      if (row.status === 'completed') actions.append(bookingAction('Ångra avslut', 'undo_finish', row, 'text-button'));
+      if (['confirmed', 'checked_in', 'completed'].includes(row.status)) actions.append(bookingAction('Avboka', 'cancel', row, 'secondary-button'));
       if (row.email && ['confirmed', 'checked_in'].includes(row.status) && !['sent', 'review', 'skipped'].includes(emailStatus) && row.date >= today()) {
         const retry = el('button', emailStatus === 'uncertain' || emailStatus === 'sending' ? 'Kontrollera mejlet' : 'Skicka bekräftelse', 'text-button'); retry.type = 'button'; retry.dataset.mutation = 'true'; retry.dataset.email = 'true';
         retry.addEventListener('click', () => mutate('email', { id: row.id }, '')); actions.append(retry);
