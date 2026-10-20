@@ -1,0 +1,62 @@
+# Nattlig säkerhetskopia av Supabase-databasen.
+# Kopian krypteras med BACKUP_PASSPHRASE innan den sparas (repot är publikt),
+# och sparas som en artifact i 30 dagar. Kör även manuellt via Actions → Backup → Run workflow.
+#
+# Kräver två hemligheter under Settings → Secrets and variables → Actions:
+#   SUPABASE_DB_URL     Supabase → Connect → "Session pooler" (URI med lösenord)
+#   BACKUP_PASSPHRASE   ett långt lösenord du själv väljer och sparar säkert
+#
+# Återställ: ladda ner artifacten, dekryptera:
+#   gpg --batch --passphrase "DITT_LÖSEN" -d albert-backup-DATUM.sql.gz.gpg | gunzip > backup.sql
+# och kör backup.sql i en ny Supabase-databas (psql eller SQL Editor).
+name: Backup
+
+on:
+  schedule:
+    - cron: '30 2 * * *'   # varje natt 02:30 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Kontrollera hemligheter
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          if [ -z "$DB" ] || [ -z "$PASS" ]; then echo "::error::Lägg in SUPABASE_DB_URL och BACKUP_PASSPHRASE under Settings → Secrets → Actions."; exit 1; fi
+          if [ ${#PASS} -lt 16 ]; then echo "::error::BACKUP_PASSPHRASE ska vara minst 16 tecken."; exit 1; fi
+
+      - name: Installera pg_dump 17
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -yq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -yq postgresql-client-17
+
+      - name: Säkerhetskopiera och kryptera
+        env:
+          DB: ${{ secrets.SUPABASE_DB_URL }}
+          PASS: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          set -euo pipefail
+          FILE="albert-backup-$(date -u +%Y-%m-%d).sql.gz.gpg"
+          /usr/lib/postgresql/17/bin/pg_dump "$DB" --schema=public --no-owner --no-privileges --quote-all-identifiers \
+            | gzip -9 \
+            | gpg --batch --yes --symmetric --cipher-algo AES256 --passphrase "$PASS" -o "$FILE"
+          test -s "$FILE"
+          echo "FILE=$FILE" >> "$GITHUB_ENV"
+          ls -la "$FILE"
+
+      - name: Spara (30 dagar)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.FILE }}
+          path: ${{ env.FILE }}
+          retention-days: 30
+          if-no-files-found: error
