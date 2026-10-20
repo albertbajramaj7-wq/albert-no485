@@ -363,3 +363,19 @@
 .admin-app .stock-now{font:500 20px/1 var(--ex-serif)}
 .admin-app .stock-group h3,.admin-app .stock-cat{color:var(--ex-taupe);letter-spacing:.14em}
 .admin-app .po-card{border-radius:var(--ex-radius)}
+/* Ekonomi */
+.admin-app .eco-heading{align-items:center;margin-bottom:18px}
+.admin-app .eco-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;margin-top:18px}
+.admin-app .eco-table{min-width:0}
+.admin-app .eco-table th{text-align:left;font:500 15px/1.3 var(--ex-sans);letter-spacing:0;text-transform:none;color:var(--ex-ink);border-bottom:1px solid var(--ex-line)}
+.admin-app .eco-table td{text-align:right;font-variant-numeric:tabular-nums}
+.admin-app .eco-table td:last-child{color:var(--ex-taupe);width:70px}
+.admin-app .eco-table .eco-total th,.admin-app .eco-table .eco-total td{font:500 20px/1.3 var(--ex-serif);border-top:2px solid var(--ex-line-2);border-bottom:0;padding-top:14px}
+.admin-app .eco-row{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--ex-line)}
+.admin-app .eco-row:last-child{border-bottom:0}
+.admin-app .eco-row div{display:flex;flex-direction:column;min-width:0}
+.admin-app .eco-row strong{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.admin-app .eco-row small{color:var(--ex-taupe);font-size:12px}
+.admin-app .eco-row span{font:500 17px/1 var(--ex-serif);white-space:nowrap}
+.admin-app .eco-row.overdue small,.admin-app .eco-row.overdue span{color:#8e3b2c}
+@media (max-width:800px){.admin-app .eco-grid{grid-template-columns:1fr}}

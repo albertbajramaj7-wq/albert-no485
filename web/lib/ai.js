@@ -26,6 +26,8 @@ export const TOOLS = [
     input_schema: { type: 'object', properties: {} } },
   { name: 'inkop', description: 'Inköpsordrar: utkast, skickade och mottagna, med rader och belopp.',
     input_schema: { type: 'object', properties: {} } },
+  { name: 'ekonomi', description: 'Ekonomiöversikt från Fortnox (bokföringen): banksaldo, skattekonto, moms att betala, personalskatt, arbetsgivaravgifter, leverantörsskulder, resultat hittills i år (intäkter, varukostnad, personal, övriga kostnader), största kostnadsposter samt obetalda leverantörs- och kundfakturor med förfallodatum. Siffrorna gäller det som är bokfört.',
+    input_schema: { type: 'object', properties: {} } },
   { name: 'meny_och_installningar', description: 'Menyn med priser samt bokningsinställningar (öppettider, ugnskapacitet, sittplatser, snittpris per pizza).',
     input_schema: { type: 'object', properties: {} } },
 ];
@@ -78,6 +80,11 @@ export async function runTool(name, input, { rpc, actor, env }) {
       const p = await rpc('api_purchase', { actor, action: 'list' });
       return { ordrar: (p.orders || []).slice(0, 40).map(o => ({ ...pick(o, ['number', 'status', 'supplierName', 'createdAt', 'sentAt', 'receivedAt']),
         rader: (o.lines || []).map(l => pick(l, ['name', 'unit', 'qty', 'unitCost', 'receivedQty'])) })) };
+    }
+    case 'ekonomi': {
+      const f = fortnoxSummary(await rpc('api_fortnox', { actor, action: 'status' }), env);
+      if (!f.connected) return { fel: 'Fortnox är inte kopplat.' };
+      return { hamtat: f.overviewAt || f.syncedAt, oversikt: f.overview || null, banksaldo: f.bankBalance };
     }
     case 'meny_och_installningar': {
       const [menu, cfg] = await Promise.all([rpc('api_menu', {}), rpc('api_admin_settings', { actor, action: 'get' })]);

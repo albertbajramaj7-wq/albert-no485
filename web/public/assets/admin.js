@@ -53,7 +53,7 @@
       const result = await request('day?date=' + encodeURIComponent($('work-date').value));
       if (current !== serial) return;
       data = result; needsRefresh = false; dirty = false;
-      $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['ai', 'budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(view);
+      $('login-panel').hidden = true; $('admin-content').hidden = false; $('admin-tabs').hidden = false; $('day-controls').hidden = ['economy', 'ai', 'budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(view);
       $('logout').hidden = false; $('account-button').hidden = false; $('menu-toggle').hidden = false;
       render();
       if (!silent) note('');
@@ -98,12 +98,12 @@
     if (open) document.querySelector('#admin-tabs [aria-current="page"]')?.focus({ preventScroll: true });
   }
   function switchView(value) {
-    if (!['day', 'phone', 'stock', 'purchase', 'tasks', 'history', 'ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) || (['ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
+    if (!['day', 'phone', 'stock', 'purchase', 'tasks', 'history', 'economy', 'ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) || (['economy', 'ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
     view = value;
     document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== value);
     document.querySelectorAll('[data-view]').forEach(b => { if (b.dataset.view === value) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
-    $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', stock: 'Lager', purchase: 'Inköp', tasks: 'Arbetsuppgifter', history: 'Historik', ai: 'AI-assistent', budget: 'Veckobudget', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
-    const ownPage = ['ai', 'budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(value);
+    $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', stock: 'Lager', purchase: 'Inköp', tasks: 'Arbetsuppgifter', history: 'Historik', economy: 'Ekonomi', ai: 'AI-assistent', budget: 'Veckobudget', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
+    const ownPage = ['economy', 'ai', 'budget', 'stats', 'menu', 'staff', 'config', 'stock', 'purchase'].includes(value);
     $('day-controls').hidden = ownPage; $('day-label').hidden = ownPage;
     note('');
     if (value === 'phone') loadPhone();
@@ -111,6 +111,7 @@
     if (value === 'purchase') loadPurchase();
     if (value === 'budget') loadBudget();
     if (value === 'ai') loadAi();
+    if (value === 'economy') loadEconomy();
     if (value === 'stats') loadStats();
     if (value === 'menu') loadMenu();
     if (value === 'staff') loadStaff();
@@ -280,7 +281,7 @@
     $('prepared').value = data.day.prepared === null ? '' : data.day.prepared; $('paused').checked = !!data.day.paused; $('after-closing').checked = !!data.day.allow_after_closing;
     $('limits-help').textContent = 'Gäller valt datum. ' + data.limits.slot + ' pizzor per tidslucka, ' + data.limits.hour + ' per timme och ' + data.limits.seats + ' sittplatser.';
     renderBookings(); renderWaste(); renderTasks(); renderHistory(); lock();
-    if (!isAdmin() && ['ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
+    if (!isAdmin() && ['economy', 'ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
     if (view === 'phone') loadPhone();
   }
 
@@ -887,6 +888,47 @@
   $('ai-input').addEventListener('keydown', event => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); askAi($('ai-input').value); } });
   document.querySelectorAll('[data-ai-q]').forEach(b => b.addEventListener('click', () => askAi(b.dataset.aiQ)));
   $('ai-clear').addEventListener('click', () => { aiMessages.length = 0; renderAi(); });
+
+
+  // ---------- Ekonomi (Fortnox) ----------
+  let economy;
+  async function loadEconomy() { const r = await adminCall('fortnox'); if (r) { economy = r; renderEconomy(); } }
+  function renderEconomy() {
+    const f = economy, o = f?.overview, when = t => t ? new Date(t).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }) : '';
+    $('eco-sync').hidden = !f?.connected;
+    const figs = $('eco-figures'); figs.replaceChildren();
+    ['eco-result', 'eco-payables', 'eco-costs', 'eco-receivables'].forEach(id => $(id).replaceChildren());
+    if (!f?.connected) { $('eco-sub').textContent = 'Fortnox är inte kopplat. Koppla det under Veckobudget → Fortnox.'; $('eco-warn').hidden = true; $('eco-year').textContent = ''; $('eco-notes').textContent = ''; return; }
+    $('eco-sub').textContent = 'Från Fortnox' + (f.companyName ? ' · ' + f.companyName : '') + (o?.asOf ? ' · bokfört t.o.m. ' + o.asOf : '') + (f.overviewAt || f.syncedAt ? ' · hämtat ' + when(f.overviewAt || f.syncedAt) : '');
+    $('eco-warn').hidden = !f.lastError; $('eco-warn').textContent = f.lastError ? 'Senaste hämtningen: ' + f.lastError : '';
+    if (!o) { $('eco-year').textContent = ''; $('eco-notes').textContent = 'Ingen översikt ännu. Tryck "Hämta nu". Kör även 0007_fortnox_ekonomi.sql i Supabase om du inte gjort det.'; return; }
+    const b = o.balances, r = o.result;
+    figs.append(
+      figure('Banksaldo', krw(b.bank), 'Bokfört på bankkonton'),
+      figure('Skattekonto', krw(b.taxAccount), 'Konto 1630'),
+      figure('Moms att betala', krw(b.vatToPay), 'Utgående minus ingående'),
+      figure('Skatt & avgifter, löner', krw((b.payrollTax || 0) + (b.employerFees || 0)), 'Personalskatt ' + krw(b.payrollTax) + ' · avgifter ' + krw(b.employerFees)),
+      figure('Leverantörsskulder', krw(b.payables), o.payables ? o.payables.count + ' obetalda fakturor' : 'Konto 2440'),
+      figure('Förfaller inom 7 dagar', o.payables ? krw(o.payables.next7) : '–', o.payables && o.payables.overdue > 0 ? 'Förfallet: ' + krw(o.payables.overdue) : 'Inget förfallet'),
+      figure('Intäkter i år', krw(r.revenue), o.financialYear?.from ? o.financialYear.from + ' – ' + o.asOf : 'Hittills i år'),
+      figure('Resultat i år', krw(r.result), r.revenue ? (Math.round(r.result / r.revenue * 1000) / 10).toLocaleString('sv-SE') + ' % av intäkterna' : '', r.result < 0 ? 'negative' : ''));
+    $('eco-year').textContent = o.financialYear?.from ? 'Räkenskapsår ' + o.financialYear.from + ' – ' + o.financialYear.to + '. Bara det som är bokfört räknas.' : '';
+    const t = $('eco-result'), tb = el('tbody'); t.append(tb);
+    const row = (label, value, pct, strong) => { const tr = el('tr', undefined, strong ? 'eco-total' : ''); tr.append(el('th', label), el('td', krw(value)), el('td', pct === null || pct === undefined ? '' : pct.toLocaleString('sv-SE') + ' %')); tb.append(tr); };
+    row('Intäkter', r.revenue); row('Varukostnad', -r.goods, r.goodsPct); row('Personal', -r.staff, r.staffPct); row('Övriga kostnader', -r.external, r.externalPct);
+    if (r.depreciation) row('Avskrivningar', -r.depreciation); if (r.financial) row('Finansiella poster', r.financial); row('Resultat', r.result, null, true);
+    const list = (root, items, empty, cls) => {
+      if (!items?.length) { root.append(el('p', empty, 'muted')); return; }
+      items.forEach(i => { const d = el('div', undefined, 'eco-row' + (cls && cls(i) ? ' ' + cls(i) : '')), l = el('div'); l.append(el('strong', i.name || ('Konto ' + i.account)), el('small', i.due ? 'Förfaller ' + i.due : i.account ? 'Konto ' + i.account : '')); d.append(l, el('span', krw(i.amount))); root.append(d); });
+    };
+    const today2 = today();
+    list($('eco-payables'), o.payables?.list, o.payables ? 'Inga obetalda leverantörsfakturor.' : 'Kunde inte hämtas.', i => i.due && i.due < today2 ? 'overdue' : '');
+    list($('eco-costs'), o.topCosts, 'Inga kostnader bokförda ännu.');
+    if (o.receivables) list($('eco-receivables'), o.receivables.list, 'Inga obetalda kundfakturor.', i => i.due && i.due < today2 ? 'overdue' : '');
+    else $('eco-receivables').append(el('p', 'Kräver behörigheten "Faktura" i Fortnox utvecklarportal. Säg till så aktiverar vi den.', 'muted'));
+    $('eco-notes').textContent = (o.notes || []).join(' ');
+  }
+  $('eco-sync').addEventListener('click', async () => { const r = await adminCall('fortnox', { action: 'sync' }, 'Uppdaterat från Fortnox.'); if (r) { economy = r; renderEconomy(); } });
 
   // ---------- Händelser ----------
   document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { switchView(b.dataset.view); drawer(false); window.scrollTo(0, 0); }));

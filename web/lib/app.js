@@ -245,7 +245,7 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
           const base = env.FORTNOX_REDIRECT_URI || ((origin && allowedOrigins.has(origin) ? origin : (env.APP_ORIGIN || url.origin)) + '/api/fortnox/callback');
           const state = randomState();
           await rpc('api_fortnox', { actor, action: 'start', state, redirectUri: base });
-          return reply({ url: authorizeUrl(cfg, base, state), redirectUri: base });
+          return reply({ url: authorizeUrl(cfg, base, state, env), redirectUri: base });
         }
         if (input.action === 'sync') { await rpc('api_fortnox', { actor, action: 'status' }); return reply(await summary(await syncFortnox({ rpc, env, fetcher, now, by: s.actor.name }))); }
         if (input.action === 'save_map') return reply(await summary(await rpc('api_fortnox', { actor, action: 'save_map', supplierMap: input.supplierMap, bankAccount: input.bankAccount })));

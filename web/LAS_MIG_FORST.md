@@ -78,7 +78,9 @@ och gästen ser sin bekräftelse på skärmen.
    Supplier Invoice, Article och Company Information. Redirect URI: `https://<din-adress>/api/fortnox/callback`.
 3. Lägg in `FORTNOX_CLIENT_ID` och `FORTNOX_CLIENT_SECRET` i Vercel. Valfritt: `CRON_SECRET`
    (hämtning varje natt kl 03 UTC) och `FORTNOX_REDIRECT_URI` om adressen ska vara fast.
-4. Admin → Veckobudget → Koppla Fortnox. Admin läser bara från Fortnox; inget bokförs eller skickas.
+4. Kör även `0007_fortnox_ekonomi.sql` (ekonomiöversikt). Kundfakturor: bocka i Faktura i portalen,
+   sätt `FORTNOX_EXTRA_SCOPES=invoice` i Vercel och koppla om.
+5. Admin → Veckobudget → Koppla Fortnox. Admin → Ekonomi visar saldon, resultat och obetalda fakturor. Admin läser bara från Fortnox; inget bokförs eller skickas.
 
 ## AI-assistent
 Admin → AI-assistent. Kräver `ANTHROPIC_API_KEY` i Vercel (skapas på console.anthropic.com, sätt en

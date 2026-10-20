@@ -32,6 +32,13 @@ async function fakeFortnox(url, init = {}) {
     { GivenNumber: 3, SupplierNumber: '20', SupplierName: 'Grossisten', InvoiceDate: '2026-10-14', Total: '9999', Booked: true, Cancelled: true },
     { GivenNumber: 4, SupplierNumber: '30', SupplierName: 'Gammal', InvoiceDate: '2025-01-14', Total: '500', Booked: true, Cancelled: false },
   ] });
+  if (/\/accounts\?/.test(url)) return ok({ MetaInformation: { '@TotalPages': 1 }, Accounts: [
+    { Number: 1930, Description: 'Företagskonto', BalanceCarriedForward: 123456.5 }, { Number: 1630, Description: 'Skattekonto', BalanceCarriedForward: 5000 },
+    { Number: 2440, Description: 'Leverantörsskulder', BalanceCarriedForward: -20000 }, { Number: 2650, Description: 'Moms', BalanceCarriedForward: -15000 },
+    { Number: 2710, Description: 'Personalskatt', BalanceCarriedForward: -8000 }, { Number: 2731, Description: 'Arbetsgivaravgifter', BalanceCarriedForward: -9000 },
+    { Number: 3001, Description: 'Försäljning', BalanceCarriedForward: -500000 }, { Number: 4010, Description: 'Varuinköp', BalanceCarriedForward: 140000 },
+    { Number: 5010, Description: 'Lokalhyra', BalanceCarriedForward: 120000 }, { Number: 7010, Description: 'Löner', BalanceCarriedForward: 150000 } ] });
+  if (url.includes('/invoices?')) return new Response(JSON.stringify({ ErrorInformation: { message: 'Saknar behörighet' } }), { status: 403 });
   return new Response('{}', { status: 404 });
 }
 
@@ -72,6 +79,13 @@ test('koppla Fortnox, hämta saldo och fakturor, nycklar sparas krypterat', asyn
   const status = await t.call('GET', '/api/admin/fortnox', undefined, { token: owner });
   assert.equal(status.body.connected, true); assert.equal(status.body.companyName, 'Test AB');
   assert.equal(status.body.bankBalance, 123456.5);
+  const o = status.body.overview;
+  assert.ok(o, 'översikten ska finnas');
+  assert.equal(o.result.revenue, 500000); assert.equal(o.result.goods, 140000); assert.equal(o.result.result, 90000);
+  assert.equal(o.result.goodsPct, 28); assert.equal(o.balances.taxAccount, 5000); assert.equal(o.balances.vatToPay, 15000);
+  assert.equal(o.balances.payables, 20000); assert.equal(o.balances.employerFees, 9000);
+  assert.equal(o.receivables, null); assert.ok(o.notes.some(n => n.includes('Faktura')));
+  assert.ok(o.payables.count >= 1);
   assert.equal(status.body.suppliers.length, 1); // makulerad faktura räknas inte
   assert.equal(status.body.suppliers[0].total, 2000);
 

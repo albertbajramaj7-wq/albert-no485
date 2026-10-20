@@ -29,6 +29,7 @@
       <button type="button" data-view="history">Historik</button>
       <hr data-role="admin" hidden>
       <button type="button" data-view="ai" data-role="admin" hidden>AI-assistent</button>
+      <button type="button" data-view="economy" data-role="admin" hidden>Ekonomi</button>
       <button type="button" data-view="budget" data-role="admin" hidden>Veckobudget</button>
       <button type="button" data-view="stats" data-role="admin" hidden>Statistik</button>
       <button type="button" data-view="menu" data-role="admin" hidden>Meny</button>
@@ -173,6 +174,19 @@
           </div>
           <form id="ai-form" class="ai-form"><label for="ai-input" class="visually-hidden">Din fråga</label><textarea id="ai-input" rows="2" maxlength="2000" placeholder="Skriv din fråga …"></textarea><button type="submit" id="ai-send" class="admin-primary">Skicka</button></form>
         </section>
+      </section>
+
+      <section data-panel="economy" hidden>
+        <div class="section-heading eco-heading"><p class="muted" id="eco-sub">Hämtar från Fortnox …</p><button type="button" id="eco-sync" class="secondary-button">Hämta nu</button></div>
+        <div id="eco-warn" class="budget-warnings" hidden></div>
+        <div class="day-summary key-figures" id="eco-figures"></div>
+        <div class="eco-grid">
+          <section class="admin-card"><h2>Resultat hittills i år</h2><p class="muted" id="eco-year"></p><div class="table-scroll"><table class="data-table eco-table" id="eco-result"></table></div></section>
+          <section class="admin-card"><h2>Kommande betalningar</h2><p class="muted">Obetalda leverantörsfakturor, närmast förfallodag först.</p><div id="eco-payables"></div></section>
+          <section class="admin-card"><h2>Största kostnaderna</h2><p class="muted">Konton i bokföringen hittills i år.</p><div id="eco-costs"></div></section>
+          <section class="admin-card"><h2>Obetalda kundfakturor</h2><div id="eco-receivables"></div></section>
+        </div>
+        <p class="field-help" id="eco-notes"></p>
       </section>
 
       <section data-panel="budget" hidden>

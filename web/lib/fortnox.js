@@ -5,7 +5,10 @@ import { AppError } from './supabase.js';
 const AUTH_URL = 'https://apps.fortnox.se/oauth-v1/auth';
 const TOKEN_URL = 'https://apps.fortnox.se/oauth-v1/token';
 const API = 'https://api.fortnox.se/3';
+// Grundbehörigheter. Kundfakturor (invoice) läggs till via FORTNOX_EXTRA_SCOPES=invoice i Vercel
+// när behörigheten "Faktura" är ibockad i utvecklarportalen – annars nekar Fortnox inloggningen.
 export const FORTNOX_SCOPES = ['bookkeeping', 'supplier', 'supplierinvoice', 'article', 'companyinformation'];
+const scopesFor = env => [...new Set([...FORTNOX_SCOPES, ...String(env?.FORTNOX_EXTRA_SCOPES || '').split(/[\s,]+/).filter(x => /^[a-z]{3,40}$/.test(x))])];
 
 export function fortnoxConfig(env) {
   const clientId = String(env.FORTNOX_CLIENT_ID || '').trim(), clientSecret = String(env.FORTNOX_CLIENT_SECRET || '').trim();
@@ -37,8 +40,8 @@ export async function decryptTokens(env, text) {
 
 export function randomState() { return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString('hex'); }
 
-export function authorizeUrl(cfg, redirectUri, state) {
-  const q = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: redirectUri, scope: FORTNOX_SCOPES.join(' '), state, access_type: 'offline', response_type: 'code' });
+export function authorizeUrl(cfg, redirectUri, state, env) {
+  const q = new URLSearchParams({ client_id: cfg.clientId, redirect_uri: redirectUri, scope: scopesFor(env).join(' '), state, access_type: 'offline', response_type: 'code' });
   return AUTH_URL + '?' + q.toString();
 }
 
@@ -134,14 +137,81 @@ export async function syncFortnox({ rpc, env, fetcher, now = () => new Date(), b
     }
   } catch (e) { errors.push('Fakturor: ' + (e instanceof AppError ? e.message : 'kunde inte hämtas.')); }
 
-  if (errors.length === 2) {
+  // 3) Ekonomiöversikt: alla konton med saldo, obetalda leverantörs- och kundfakturor
+  let overview = null;
+  try { overview = await buildOverview({ fetcher, token, today, tryPaths, bankAccount }); }
+  catch (e) { errors.push('Översikt: ' + (e instanceof AppError ? e.message : 'kunde inte hämtas.')); }
+
+  if (errors.length >= 2 && bankBalance === null && !invoices.length && !overview) {
     const message = errors.join(' ');
     await rpc('api_fortnox_system', { action: 'save_error', error: message }).catch(() => {});
     throw new AppError(502, message);
   }
+  if (overview) { try { await rpc('api_fortnox_overview', { overview }); } catch { errors.push('Översikten sparades inte (kör 0007_fortnox_ekonomi.sql i Supabase).'); } }
   const status = await rpc('api_fortnox_system', { action: 'save_sync', bankBalance, supplierInvoices: invoices.filter(i => /^\d{4}-\d{2}-\d{2}$/.test(i.date) && i.total !== null), by });
   if (errors.length) return await rpc('api_fortnox_system', { action: 'save_error', error: errors.join(' ') });
   return status;
+}
+
+// Kontointervall enligt BAS-kontoplanen.
+const inRange = (n, a, b) => n >= a && n <= b;
+const sumAcc = (accounts, a, b) => Math.round(accounts.filter(x => inRange(x.n, a, b)).reduce((s, x) => s + x.v, 0) * 100) / 100;
+
+async function buildOverview({ fetcher, token, today, tryPaths, bankAccount }) {
+  const notes = [];
+  // Räkenskapsår
+  const years = (await tryPaths(['/financialyears', '/financialyears?date=' + today]))?.FinancialYears || [];
+  const fy = years.find(y => y.FromDate <= today && y.ToDate >= today) || years[years.length - 1] || null;
+  // Alla konton med utgående saldo (bokfört hittills i år)
+  const accounts = [];
+  for (let page = 1; page <= 10; page++) {
+    const r = await tryPaths([...(fy ? ['/accounts?financialyear=' + fy.Id + '&limit=500&page=' + page] : []), '/accounts?limit=500&page=' + page]);
+    for (const a of r?.Accounts || []) {
+      const n = Number(a.Number), v = money(a.BalanceCarriedForward);
+      if (Number.isInteger(n) && v !== null && v !== 0) accounts.push({ n, name: String(a.Description || '').slice(0, 60), v });
+    }
+    if (page >= Number(r?.MetaInformation?.['@TotalPages'] || 1)) break;
+  }
+  const neg = x => Math.round(-x * 100) / 100;
+  const revenue = neg(sumAcc(accounts, 3000, 3999));
+  const goods = sumAcc(accounts, 4000, 4999), external = sumAcc(accounts, 5000, 6999), staff = sumAcc(accounts, 7000, 7699), depreciation = sumAcc(accounts, 7700, 7899);
+  const financial = neg(sumAcc(accounts, 8000, 8799)), result = neg(sumAcc(accounts, 3000, 8999));
+  const pct = x => revenue > 0 ? Math.round(x / revenue * 1000) / 10 : null;
+  const balances = {
+    bank: sumAcc(accounts, 1900, 1989), bankAccount: sumAcc(accounts, bankAccount, bankAccount),
+    taxAccount: sumAcc(accounts, 1630, 1630), receivables: sumAcc(accounts, 1510, 1519),
+    payables: neg(sumAcc(accounts, 2440, 2449)), vatToPay: neg(sumAcc(accounts, 2610, 2650)),
+    payrollTax: neg(sumAcc(accounts, 2710, 2710)), employerFees: neg(sumAcc(accounts, 2730, 2739)), taxDebt: neg(sumAcc(accounts, 2510, 2518)),
+  };
+  // Obetalda leverantörsfakturor (kommande betalningar)
+  let payables = null;
+  try {
+    const list = [];
+    for (let page = 1; page <= 5; page++) {
+      const r = await tryPaths(['/supplierinvoices?filter=unpaid&limit=500&page=' + page]);
+      for (const i of r?.SupplierInvoices || []) list.push({ name: String(i.SupplierName || '').slice(0, 60), due: String(i.DueDate || '').slice(0, 10), amount: money(i.Balance ?? i.Total) ?? 0, total: money(i.Total) ?? 0 });
+      if (page >= Number(r?.MetaInformation?.['@TotalPages'] || 1)) break;
+    }
+    list.sort((a, b) => a.due.localeCompare(b.due));
+    const in7 = new Date(new Date(today + 'T12:00:00Z').getTime() + 7 * 864e5).toISOString().slice(0, 10);
+    payables = { count: list.length, total: Math.round(list.reduce((s, x) => s + x.amount, 0) * 100) / 100,
+      overdue: list.filter(x => x.due && x.due < today).reduce((s, x) => s + x.amount, 0),
+      next7: list.filter(x => x.due >= today && x.due <= in7).reduce((s, x) => s + x.amount, 0), list: list.slice(0, 25) };
+  } catch (e) { notes.push('Obetalda leverantörsfakturor kunde inte hämtas.'); }
+  // Obetalda kundfakturor (kräver behörigheten Faktura)
+  let receivables = null;
+  try {
+    const r = await api(fetcher, token, '/invoices?filter=unpaid&limit=500');
+    const list = (r?.Invoices || []).map(i => ({ name: String(i.CustomerName || '').slice(0, 60), due: String(i.DueDate || '').slice(0, 10), amount: money(i.Balance ?? i.Total) ?? 0 }));
+    list.sort((a, b) => a.due.localeCompare(b.due));
+    receivables = { count: list.length, total: Math.round(list.reduce((s, x) => s + x.amount, 0) * 100) / 100, overdue: list.filter(x => x.due && x.due < today).reduce((s, x) => s + x.amount, 0), list: list.slice(0, 25) };
+  } catch (e) { notes.push(e.fortnoxStatus === 403 || /behörighet/.test(e.message) ? 'Kundfakturor: lägg till behörigheten Faktura i Fortnox utvecklarportal för att se dem.' : 'Kundfakturor kunde inte hämtas.'); }
+  const top = (a, b, n) => accounts.filter(x => inRange(x.n, a, b)).sort((x, y) => Math.abs(y.v) - Math.abs(x.v)).slice(0, n).map(x => ({ account: x.n, name: x.name, amount: Math.round(Math.abs(x.v) * 100) / 100 }));
+  return {
+    asOf: today, financialYear: fy ? { from: fy.FromDate, to: fy.ToDate } : null, balances,
+    result: { revenue, goods, external, staff, depreciation, financial, result, goodsPct: pct(goods), staffPct: pct(staff), externalPct: pct(external) },
+    topCosts: top(4000, 7999, 8), topRevenue: top(3000, 3999, 5), payables, receivables, notes,
+  };
 }
 
 /** Efter godkännande i Fortnox: byt kod mot nycklar och spara krypterat. */
@@ -185,5 +255,6 @@ export function fortnoxSummary(status, env) {
     syncedAt: status?.syncedAt || null, syncedBy: status?.syncedBy || null, lastError: status?.lastError || null,
     supplierMap: status?.supplierMap || {}, suppliers: Object.values(suppliers).sort((a, b) => b.total - a.total),
     suggestions: fortnoxSuggestions(status),
+    overview: status?.overview || null, overviewAt: status?.overviewAt || null, scope: status?.scope || '',
   };
 }
