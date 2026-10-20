@@ -102,3 +102,4 @@ sammanställd data via verktyg i `lib/ai.js` – inga gästuppgifter skickas och
 - All bokningslogik ligger i databasfunktionerna `api_*`. Bara servern får anropa dem.
   Tabellerna har RLS påslaget utan öppna regler, så Supabase publika nyckel kommer inte åt någon data.
 
+
