@@ -80,7 +80,8 @@ async function api(fetcher, token, path) {
     const msg = body?.ErrorInformation?.message || body?.ErrorInformation?.Message || '';
     if (response.status === 401) throw new AppError(502, 'Fortnox nekade åtkomst. Koppla Fortnox igen i admin.');
     if (response.status === 403) throw new AppError(502, 'Fortnox saknar behörighet för ' + path.split('?')[0].replace('/', '') + '. Kontrollera behörigheterna i utvecklarportalen och licenserna i Fortnox.');
-    throw new AppError(502, 'Fortnox svarade ' + response.status + (msg ? ': ' + msg : '') + '.');
+    const step = path.split('?')[0].replace(/^\//, '').split('/')[0];
+    throw Object.assign(new AppError(502, 'Fortnox svarade ' + response.status + ' på ' + step + (msg ? ': ' + msg.replace(/\.+$/, '') : '') + '.'), { fortnoxStatus: response.status });
   }
   return body;
 }
@@ -88,33 +89,59 @@ async function api(fetcher, token, path) {
 const day = d => d.toISOString().slice(0, 10);
 const money = v => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? Math.round(n * 100) / 100 : null; };
 
-/** Hämtar data från Fortnox och sparar en sammanställning. */
+/** Hämtar data från Fortnox och sparar en sammanställning. Varje del hämtas för sig,
+ *  så att ett fel i en del (t.ex. fakturorna) inte stoppar resten (t.ex. banksaldot). */
 export async function syncFortnox({ rpc, env, fetcher, now = () => new Date(), by = 'Automatiskt' }) {
-  try {
-    const { token, bankAccount } = await accessToken({ rpc, env, fetcher, now });
-    const today = day(now());
-    // Enligt Fortnox OpenAPI: /3/financialyears?Date=ÅÅÅÅ-MM-DD. Saknas året används financialyeardate direkt.
-    const years = await api(fetcher, token, '/financialyears?Date=' + today);
-    const year = years?.FinancialYears?.[0]?.Id;
-    const account = await api(fetcher, token, '/accounts/' + bankAccount + (year ? '?financialyear=' + year : '?financialyeardate=' + today));
-    const bankBalance = money(account?.Account?.BalanceCarriedForward);
-    const from = day(new Date(now().getTime() - 120 * 864e5));
-    const invoices = [];
-    for (let page = 1; page <= 10; page++) {
-      const r = await api(fetcher, token, '/supplierinvoices?fromdate=' + from + '&todate=' + today + '&limit=500&page=' + page);
-      for (const i of r?.SupplierInvoices || []) {
-        if (i.Cancelled === true || i.Cancelled === 'true') continue;
-        invoices.push({ no: String(i.GivenNumber ?? ''), supplier: String(i.SupplierNumber ?? ''), name: String(i.SupplierName ?? '').slice(0, 80),
-          date: String(i.InvoiceDate ?? '').slice(0, 10), total: money(i.Total), booked: i.Booked === true || i.Booked === 'true' });
-      }
-      if (page >= Number(r?.MetaInformation?.['@TotalPages'] || 1)) break;
-    }
-    return await rpc('api_fortnox_system', { action: 'save_sync', bankBalance, supplierInvoices: invoices.filter(i => /^\d{4}-\d{2}-\d{2}$/.test(i.date) && i.total !== null), by });
-  } catch (error) {
+  let token, bankAccount;
+  try { ({ token, bankAccount } = await accessToken({ rpc, env, fetcher, now })); }
+  catch (error) {
     const message = error instanceof AppError ? error.message : 'Hämtningen från Fortnox misslyckades.';
     await rpc('api_fortnox_system', { action: 'save_error', error: message }).catch(() => {});
     throw error instanceof AppError ? error : new AppError(502, message);
   }
+  const today = day(now()), from = day(new Date(now().getTime() - 120 * 864e5));
+  const errors = [];
+  // Försök med flera varianter av samma anrop; Fortnox är noga med parametrar.
+  const tryPaths = async paths => { let last; for (const p of paths) { try { return await api(fetcher, token, p); } catch (e) { last = e; if (e.fortnoxStatus !== 400 && e.fortnoxStatus !== 404) throw e; } } throw last; };
+
+  // 1) Banksaldo
+  let bankBalance = null;
+  try {
+    const years = await tryPaths(['/financialyears', '/financialyears?date=' + today]);
+    const list = years?.FinancialYears || [];
+    const year = (list.find(y => y.FromDate <= today && y.ToDate >= today) || list[list.length - 1])?.Id;
+    const account = await tryPaths([...(year ? ['/accounts/' + bankAccount + '?financialyear=' + year] : []), '/accounts/' + bankAccount]);
+    bankBalance = money(account?.Account?.BalanceCarriedForward);
+  } catch (e) { errors.push('Banksaldo: ' + (e instanceof AppError ? e.message : 'kunde inte hämtas.')); }
+
+  // 2) Leverantörsfakturor senaste 120 dagarna
+  const invoices = [];
+  try {
+    for (let page = 1; page <= 10; page++) {
+      const r = await tryPaths([
+        '/supplierinvoices?fromdate=' + from + '&todate=' + today + '&limit=500&page=' + page,
+        '/supplierinvoices?limit=500&page=' + page,
+        ...(page === 1 ? ['/supplierinvoices'] : []),
+      ]);
+      for (const i of r?.SupplierInvoices || []) {
+        if (i.Cancelled === true || i.Cancelled === 'true') continue;
+        const date = String(i.InvoiceDate ?? '').slice(0, 10);
+        if (date < from || date > today) continue;
+        invoices.push({ no: String(i.GivenNumber ?? ''), supplier: String(i.SupplierNumber ?? ''), name: String(i.SupplierName ?? '').slice(0, 80),
+          date, total: money(i.Total), booked: i.Booked === true || i.Booked === 'true' });
+      }
+      if (page >= Number(r?.MetaInformation?.['@TotalPages'] || 1)) break;
+    }
+  } catch (e) { errors.push('Fakturor: ' + (e instanceof AppError ? e.message : 'kunde inte hämtas.')); }
+
+  if (errors.length === 2) {
+    const message = errors.join(' ');
+    await rpc('api_fortnox_system', { action: 'save_error', error: message }).catch(() => {});
+    throw new AppError(502, message);
+  }
+  const status = await rpc('api_fortnox_system', { action: 'save_sync', bankBalance, supplierInvoices: invoices.filter(i => /^\d{4}-\d{2}-\d{2}$/.test(i.date) && i.total !== null), by });
+  if (errors.length) return await rpc('api_fortnox_system', { action: 'save_error', error: errors.join(' ') });
+  return status;
 }
 
 /** Efter godkännande i Fortnox: byt kod mot nycklar och spara krypterat. */

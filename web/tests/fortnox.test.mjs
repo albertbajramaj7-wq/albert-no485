@@ -22,10 +22,15 @@ async function fakeFortnox(url, init = {}) {
   if (url.endsWith('/companyinformation')) return ok({ CompanyInformation: { CompanyName: 'Test AB' } });
   if (url.includes('/financialyears')) return ok({ FinancialYears: [{ Id: 4, FromDate: '2026-01-01', ToDate: '2026-12-31' }] });
   if (url.includes('/accounts/1930')) return ok({ Account: { Number: 1930, BalanceCarriedForward: 123456.5 } });
+  // Som i verkligheten: Fortnox avvisar datumfiltret med 400 – hämtningen ska då prova utan.
+  if (url.includes('/supplierinvoices') && url.includes('fromdate')) return new Response(JSON.stringify({ ErrorInformation: { error: 1, message: 'Ogiltig parameter i anropet.', code: 2000588 } }), { status: 400 });
+  if (url.includes('/financialyears')) return ok({ FinancialYears: [{ Id: 3, FromDate: '2025-01-01', ToDate: '2025-12-31' }, { Id: 4, FromDate: '2026-01-01', ToDate: '2026-12-31' }] });
+  if (url.includes('/accounts/1930')) { assert.match(url, /financialyear=4/); return ok({ Account: { Number: 1930, BalanceCarriedForward: 123456.5 } }); }
   if (url.includes('/supplierinvoices')) return ok({ MetaInformation: { '@TotalPages': 1 }, SupplierInvoices: [
     { GivenNumber: 1, SupplierNumber: '10', SupplierName: 'Vedbolaget', InvoiceDate: '2026-10-13', Total: '1250.00', Booked: true, Cancelled: false },
     { GivenNumber: 2, SupplierNumber: '10', SupplierName: 'Vedbolaget', InvoiceDate: '2026-10-15', Total: '750', Booked: false, Cancelled: false },
     { GivenNumber: 3, SupplierNumber: '20', SupplierName: 'Grossisten', InvoiceDate: '2026-10-14', Total: '9999', Booked: true, Cancelled: true },
+    { GivenNumber: 4, SupplierNumber: '30', SupplierName: 'Gammal', InvoiceDate: '2025-01-14', Total: '500', Booked: true, Cancelled: false },
   ] });
   return new Response('{}', { status: 404 });
 }
