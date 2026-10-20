@@ -24,6 +24,22 @@
   const isAdmin = () => ['owner', 'admin'].includes(data?.actor?.role);
   // Ekonomin (Veckobudget, Ekonomi) är dold tills vidare – bara bokningar används. Sparas per enhet.
   const showFinance = () => { try { return localStorage.getItem('albert-show-finance') === '1'; } catch { return false; } };
+  // Låst läge: allt syns som referens men inga knappar/fält går att använda.
+  const lockFinance = () => {
+    const locked = !showFinance();
+    document.querySelectorAll('[data-finance-panel]').forEach(panel => {
+      panel.classList.toggle('finance-locked', locked);
+      panel.querySelectorAll('input, select, textarea, button').forEach(c => {
+        if (c.closest('.budget-nav')) return; // bläddra mellan veckor går alltid
+        if (locked) { if (!c.disabled) { c.disabled = true; c.dataset.lockedByFinance = '1'; } }
+        else if (c.dataset.lockedByFinance) { c.disabled = false; delete c.dataset.lockedByFinance; }
+      });
+    });
+    document.querySelectorAll('[data-finance-lock]').forEach(b => { b.hidden = !locked; });
+    document.querySelectorAll('#admin-tabs .lock-tag').forEach(t => { t.hidden = !locked; });
+  };
+  new MutationObserver(() => { if (!showFinance()) lockFinance(); })
+    .observe(document.body, { childList: true, subtree: true });
   function el(tag, text, cls) { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node; }
   function button(text, cls, onClick) { const b = el('button', text, cls); b.type = 'button'; b.addEventListener('click', onClick); return b; }
   function note(message, success = false) { $('notice').textContent = message; $('notice').hidden = !message; $('notice').classList.toggle('success', success); }
@@ -261,7 +277,7 @@
   }
   function render() {
     $('account-name').textContent = data.actor.name + ' · ' + roles[data.actor.role];
-    document.querySelectorAll('#admin-tabs [data-role="admin"]').forEach(b => { b.hidden = !isAdmin() || (b.dataset.feature === 'finance' && !showFinance()); });
+    document.querySelectorAll('#admin-tabs [data-role="admin"]').forEach(b => { b.hidden = !isAdmin(); });
     $('day-settings').hidden = !isAdmin();
     $('email-setup').hidden = !!data.emailSetup?.configured;
     $('email-setup').textContent = 'Mejlbekräftelser är inte aktiverade ännu. Resend behöver en API-nyckel och en verifierad avsändare. Bokningar sparas som vanligt.';
@@ -934,10 +950,12 @@
 
 
   $('show-finance').checked = showFinance();
+  lockFinance();
   $('show-finance').addEventListener('change', () => {
     try { localStorage.setItem('albert-show-finance', $('show-finance').checked ? '1' : '0'); } catch { /* ignoreras */ }
     if (data) render();
-    note($('show-finance').checked ? 'Veckobudget och Ekonomi visas i menyn.' : 'Veckobudget och Ekonomi är dolda.', true);
+    lockFinance();
+    note($('show-finance').checked ? 'Veckobudget och Ekonomi är upplåsta.' : 'Veckobudget och Ekonomi är låsta (endast referens).', true);
   });
   // ---------- Händelser ----------
   document.querySelectorAll('[data-view]').forEach(b => b.addEventListener('click', () => { switchView(b.dataset.view); drawer(false); window.scrollTo(0, 0); }));

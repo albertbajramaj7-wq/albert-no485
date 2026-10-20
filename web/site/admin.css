@@ -379,3 +379,8 @@
 .admin-app .eco-row span{font:500 17px/1 var(--ex-serif);white-space:nowrap}
 .admin-app .eco-row.overdue small,.admin-app .eco-row.overdue span{color:#8e3b2c}
 @media (max-width:800px){.admin-app .eco-grid{grid-template-columns:1fr}}
+
+/* Låst ekonomi: syns som referens, går inte att använda */
+.finance-lock-banner{margin:0 0 16px;padding:12px 16px;border-radius:12px;border:1px solid rgba(120,90,60,.35);background:rgba(120,90,60,.08);color:inherit;font-size:.92rem;line-height:1.45}
+.finance-locked input,.finance-locked select,.finance-locked textarea,.finance-locked button{cursor:not-allowed;opacity:.55}
+.lock-tag{font-size:.75em;margin-left:2px;opacity:.75}
