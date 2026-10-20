@@ -29,8 +29,8 @@
       <button type="button" data-view="history">Historik</button>
       <hr data-role="admin" hidden>
       <button type="button" data-view="ai" data-role="admin" hidden>AI-assistent</button>
-      <button type="button" data-view="economy" data-role="admin" hidden>Ekonomi</button>
-      <button type="button" data-view="budget" data-role="admin" hidden>Veckobudget</button>
+      <button type="button" data-view="economy" data-role="admin" data-feature="finance" hidden>Ekonomi</button>
+      <button type="button" data-view="budget" data-role="admin" data-feature="finance" hidden>Veckobudget</button>
       <button type="button" data-view="stats" data-role="admin" hidden>Statistik</button>
       <button type="button" data-view="menu" data-role="admin" hidden>Meny</button>
       <button type="button" data-view="staff" data-role="admin" hidden>Personal</button>
@@ -286,6 +286,8 @@
           </section>
           <div><button type="submit" class="admin-primary">Spara inställningar</button></div>
         </form>
+        <section class="admin-card"><h2>Ekonomifunktioner</h2><p class="muted">Veckobudget och Ekonomi (Fortnox) är dolda tills kassan är flyttad till det nya bolaget. Inget är borttaget – slå på för att visa dem i menyn igen.</p>
+          <label class="admin-checkbox"><input type="checkbox" id="show-finance">Visa Veckobudget och Ekonomi i menyn</label></section>
         <section class="admin-card closed-card"><h2>Stängda datum</h2><p class="muted">Helgdagar, semester eller privata evenemang. Befintliga bokningar påverkas inte, men inga nya kan göras.</p>
           <form id="closed-form" class="task-form"><div><label for="closed-date">Datum</label><input id="closed-date" type="date" required></div><div class="task-title-field"><label for="closed-reason">Anledning</label><input id="closed-reason" maxlength="200" placeholder="Till exempel julafton"></div><button type="submit" class="admin-primary">Stäng datumet</button></form>
           <div id="closed-list"></div>
