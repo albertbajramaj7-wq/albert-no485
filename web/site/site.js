@@ -99,3 +99,14 @@
     });
   }).catch(() => {});
 })();
+
+// Startsidans film: iPhone stoppar ibland automatisk uppspelning (t.ex. i strömsparläge).
+// Försök spela direkt, och annars vid första tryck/scroll.
+(function(){
+  var v=document.querySelector('.hero-video'); if(!v) return;
+  v.muted=true; v.defaultMuted=true; v.setAttribute('muted',''); v.setAttribute('playsinline',''); v.setAttribute('webkit-playsinline','');
+  function go(){ var p=v.play(); if(p&&p.catch) p.catch(function(){}); }
+  go();
+  ['touchstart','touchend','scroll','click','keydown'].forEach(function(e){ window.addEventListener(e,go,{once:true,passive:true}); });
+  document.addEventListener('visibilitychange',function(){ if(!document.hidden) go(); });
+})();

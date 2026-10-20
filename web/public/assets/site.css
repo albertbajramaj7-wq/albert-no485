@@ -79,7 +79,7 @@ footer{overflow:hidden}
 /* Startsidans film: tyst, i loop. Stillbilden syns vid "minska rörelse" och tills filmen laddat. */
 .hero>.hero-video{position:absolute;inset:0;z-index:-3;width:100%;height:100%;object-fit:cover;object-position:center 55%}
 @media (max-width:760px){.hero>.hero-video{object-position:center center}}
-@media (prefers-reduced-motion:reduce){.hero>.hero-video{display:none}}
+/* Filmen visas även med "Minska rörelse" (ljudlös bakgrund, önskat av Albert). */
 /* Integritetspolicy */
 .legal{padding:150px 0 90px}
 .legal-inner{max-width:760px}
