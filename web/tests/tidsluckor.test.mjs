@@ -6,7 +6,7 @@ import { setup, sql, bookingBody } from './helpers.mjs';
 let t;
 before(() => {
   t = setup();
-  sql(t.db, 'update settings set slot_min = 8, slot_cap = 4, sit_after_close = true where id = 1');
+  sql(t.db, 'update settings set slot_min = 8, slot_cap = 4, sit_after_close = true, pizza_min = null where id = 1');
 });
 after(() => t.close());
 
