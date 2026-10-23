@@ -6,7 +6,7 @@ import { setup, sql, bookingBody } from './helpers.mjs';
 let t, owner;
 before(async () => {
   t = setup();
-  sql(t.db, 'update settings set slot_min = 8, slot_cap = 4, sit_after_close = true, pizza_min = 2 where id = 1');
+  sql(t.db, 'update settings set slot_min = 8, slot_cap = 4, sit_after_close = true, pizza_min = 2, pizza_sec = 120 where id = 1');
   t.auth.addUser('albert@albertno485.com', 'hemligt-losen-1', 'Albert');
   owner = t.auth.tokenFor('albert@albertno485.com');
   await t.call('GET', '/api/admin/day', undefined, { token: owner });
@@ -61,8 +61,27 @@ test('i dag räknas bara tid från och med nu', async () => {
 });
 
 test('inställningen 0 går tillbaka till tidsluckor', async () => {
-  sql(t.db, 'update settings set pizza_min = null where id = 1');
+  sql(t.db, 'update settings set pizza_min = null, pizza_sec = null where id = 1');
   t.clock.now = D + 'T10:00:00+02:00';
   assert.equal((await slot('20:53')).remaining, 8);   // tidsluckor: 4 + 4 i luckan före
-  sql(t.db, 'update settings set pizza_min = 2 where id = 1');
+  sql(t.db, 'update settings set pizza_min = 2, pizza_sec = 120 where id = 1');
 });
+
+test('2,5 minuter per pizza: färdigtiden avrundas uppåt till hel minut', async () => {
+  const day = '2026-10-28';
+  const r = await t.call('POST', '/api/admin/config', { action: 'save', settings: { ...(await cfg()), pizzaMin: '2,5' } }, { token: owner });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  assert.equal(r.body.pizza_sec, 150);
+  t.clock.now = day + 'T17:25:00+01:00'; // vintertid
+  const sg = async n => (await t.call('POST', '/api/admin/dropin', { date: day, action: 'suggest', count: n, mode: 'away' }, { token: owner })).body.time;
+  assert.equal(await sg(2), '17:30');   // 5 min
+  assert.equal(await sg(3), '17:33');   // 7,5 min → 17:33
+  assert.equal((await t.call('POST', '/api/admin/config', { action: 'save', settings: { ...(await cfg()), pizzaMin: 0.2 } }, { token: owner })).status, 400);
+});
+
+async function cfg() {
+  const c = (await t.call('GET', '/api/admin/config', undefined, { token: owner })).body;
+  return { version: c.version, openWeekdays: c.open_weekdays, slotCap: c.slot_cap, slotMin: c.slot_min, hourCap: c.hour_cap, seats: c.seats, sittingMin: c.sitting_min,
+    arrivalMin: c.arrival_min, horizonDays: c.horizon_days, maxCount: c.max_count, maxGuests: c.max_guests, lunchFirst: c.lunch_first, lunchLast: c.lunch_last,
+    dinnerFirst: c.dinner_first, dinnerLast: c.dinner_last, avgPizzaPrice: c.avg_pizza_price, wasteCost: c.waste_cost };
+}

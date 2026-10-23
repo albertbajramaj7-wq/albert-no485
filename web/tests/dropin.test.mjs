@@ -6,7 +6,7 @@ import { setup, sql, bookingBody } from './helpers.mjs';
 let t, owner;
 before(async () => {
   t = setup();
-  sql(t.db, 'update settings set slot_min = 8, slot_cap = 4, sit_after_close = true, pizza_min = null where id = 1');
+  sql(t.db, 'update settings set slot_min = 8, slot_cap = 4, sit_after_close = true, pizza_min = null, pizza_sec = null where id = 1');
   t.auth.addUser('albert@albertno485.com', 'hemligt-losen-1', 'Albert');
   owner = t.auth.tokenFor('albert@albertno485.com');
   await t.call('GET', '/api/admin/day', undefined, { token: owner });

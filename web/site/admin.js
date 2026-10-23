@@ -680,6 +680,7 @@
   async function loadConfig() { const result = await adminCall('config'); if (result) { config = result; renderConfig(); } }
   function renderConfig() {
     cfgFields.forEach(f => { $('cfg-' + f).value = config[cfgColumns[f]] ?? 0; });
+    $('cfg-pizzaMin').value = config.pizza_sec ? config.pizza_sec / 60 : (config.pizza_min ?? 0);
     $('cfg-sitAfterClose').checked = !!config.sit_after_close;
     ['lunchFirst', 'lunchLast', 'dinnerFirst', 'dinnerLast'].forEach(f => { $('cfg-' + f).value = time(config[f.replace(/[A-Z]/, c => '_' + c.toLowerCase())]); });
     const boxes = $('weekday-boxes'); boxes.replaceChildren();
