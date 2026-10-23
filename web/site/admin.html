@@ -58,11 +58,12 @@
     <div id="loading" class="admin-loading" role="status">Hämtar din arbetsdag.</div>
     <div id="admin-content" hidden>
       <section data-panel="day">
+        <div class="live-clock" aria-label="Klockan just nu"><strong id="live-clock">--:--</strong><span id="live-clock-sub"></span></div>
         <p id="closed-banner" class="admin-notice" hidden></p>
         <div class="day-summary key-figures" aria-label="Dagens huvudsiffror">
           <div class="kf-main"><span>Återstående pizzor</span><strong id="kf-remaining">—</strong><small id="kf-remaining-sub"></small></div>
           <div><span>Bokade pizzor</span><strong id="kf-booked">—</strong><small>Räknas av automatiskt</small></div>
-          <div><span>Sålda drop-in-pizzor</span><strong id="kf-dropin">—</strong><small>Plus/minus eller manuellt antal</small></div>
+          <div><span>Sålda drop-in-pizzor</span><strong id="kf-dropin">—</strong><small>Får tid i ugnen automatiskt</small></div>
           <div><span>Förstörda pizzor</span><strong id="kf-waste">—</strong><small>Svinn räknas inte som sålt</small></div>
           <div><span>Totalt förbrukade pizzor</span><strong id="kf-used">—</strong><small>Bokningar, drop-in och svinn</small></div>
           <div><span>Bokningar</span><strong id="kf-bookings">—</strong><small id="kf-bookings-sub"></small></div>
@@ -75,10 +76,22 @@
             <form id="stock-form"><label class="sr-only" for="prepared">Antal förberedda pizzor</label><div class="stock-input"><input id="prepared" type="number" min="0" max="10000" inputmode="numeric" placeholder="Ange antal"><button type="submit" class="admin-primary" data-mutation>Spara</button></div></form>
             <p id="stock-explanation" class="field-help">Ange hur många pizzor du har förberett.</p>
           </section>
-          <section class="admin-card counter-card">
-            <h2>Sålda drop-in</h2>
+          <section class="admin-card counter-card dropin-card">
+            <h2>Drop-in</h2>
+            <form id="dropin-form" class="dropin-form">
+              <div class="dropin-row">
+                <div><span class="dropin-label" id="di-count-label">Pizzor</span><div class="counter-buttons small"><button type="button" id="di-minus" aria-label="En pizza färre">−</button><output id="di-count" aria-labelledby="di-count-label">2</output><button type="button" id="di-plus" aria-label="En pizza till">+</button></div></div>
+                <div class="dropin-mode" role="group" aria-label="Äter här eller tar med"><button type="button" class="mode-btn" data-di-mode="here" aria-pressed="true">Äter här</button><button type="button" class="mode-btn" data-di-mode="away" aria-pressed="false">Ta med</button></div>
+                <div id="di-guests-wrap"><label for="di-guests" class="dropin-label">Gäster</label><input id="di-guests" type="number" min="1" max="100" value="2" inputmode="numeric"></div>
+              </div>
+              <p class="dropin-suggest" id="di-suggest" aria-live="polite">Räknar ut ugnstid …</p>
+              <button type="submit" class="admin-primary" data-mutation id="di-submit">Registrera drop-in</button>
+            </form>
+            <div id="dropin-list" class="dropin-list"></div>
+            <details class="manual-counter"><summary>Räkna utan ugnstid (+/−)</summary>
             <div class="counter-buttons"><button type="button" data-counter="dropin" data-delta="-1" data-mutation aria-label="Minska drop-in med en">−</button><output id="dropin-value" aria-label="Antal sålda drop-in-pizzor">—</output><button type="button" data-counter="dropin" data-delta="1" data-mutation aria-label="Öka drop-in med en">+</button></div>
             <details class="manual-counter"><summary>Ange antal manuellt</summary><form class="counter-form" data-counter-form="dropin"><label class="sr-only" for="dropin-manual">Totalt antal sålda drop-in-pizzor</label><input id="dropin-manual" type="number" min="0" max="10000" required inputmode="numeric"><button type="submit" class="secondary-button" data-mutation>Spara antal</button></form></details>
+            </details>
           </section>
           <section class="admin-card counter-card waste-card">
             <div class="waste-head"><h2>Förstörda / svinn</h2><output id="waste-value" aria-label="Antal förstörda pizzor">—</output></div>

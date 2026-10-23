@@ -384,3 +384,30 @@
 .finance-lock-banner{margin:0 0 16px;padding:12px 16px;border-radius:12px;border:1px solid rgba(120,90,60,.35);background:rgba(120,90,60,.08);color:inherit;font-size:.92rem;line-height:1.45}
 .finance-locked input,.finance-locked select,.finance-locked textarea,.finance-locked button{cursor:not-allowed;opacity:.55}
 .lock-tag{font-size:.75em;margin-left:2px;opacity:.75}
+
+/* Klocka */
+.live-clock{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin:0 0 18px;padding:14px 20px;border-radius:var(--ex-radius);background:linear-gradient(135deg,var(--ex-brown),var(--ex-ink));color:var(--ex-ivory);box-shadow:var(--ex-shadow)}
+.live-clock strong{font:600 clamp(40px,8vw,64px)/1 var(--ex-sans);font-variant-numeric:tabular-nums;letter-spacing:-1px}
+.live-clock span{font:400 15px/1.3 var(--ex-serif);color:var(--ex-champagne-2);text-transform:capitalize}
+
+/* Drop-in med ugnstid */
+.daily-controls .dropin-card{grid-column:span 2}
+.dropin-form{display:grid;gap:12px;margin-top:12px}
+.dropin-row{display:flex;flex-wrap:wrap;align-items:end;gap:14px 18px}
+.dropin-label{display:block;font-size:12px;color:var(--ex-taupe);margin-bottom:4px}
+.counter-buttons.small{margin:0;gap:10px;justify-content:flex-start}
+.counter-buttons.small output{min-width:44px;text-align:center}
+.dropin-mode{display:flex;border:1px solid var(--ex-line-2);border-radius:12px;overflow:hidden}
+.dropin-mode .mode-btn{border:0;border-radius:0;background:var(--ex-card);color:var(--ex-brown);padding:12px 16px;min-height:48px;font-size:14px;cursor:pointer}
+.dropin-mode .mode-btn[aria-pressed="true"]{background:var(--ex-brown);color:var(--ex-ivory)}
+#di-guests-wrap input{width:90px;height:48px;font-size:18px}
+.dropin-suggest{margin:0;padding:12px 14px;border-radius:12px;background:var(--ex-paper);border:1px solid var(--ex-line);font-size:15px;color:var(--ex-ink)}
+.dropin-suggest strong{font-size:26px;font-variant-numeric:tabular-nums;margin:0 2px}
+.dropin-suggest small{display:block;margin-top:4px;color:#9a4a2e}
+.dropin-suggest.warn{border-color:#d9b8a6;background:#fbf1ec}
+.dropin-list{margin-top:14px}
+.dropin-list h3{font:600 13px/1.4 var(--ex-sans);color:var(--ex-taupe);margin:0 0 6px;text-transform:uppercase;letter-spacing:.06em}
+.dropin-item{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--ex-line);font-size:14px}
+.dropin-item strong{font-size:18px;font-variant-numeric:tabular-nums;min-width:52px}
+.dropin-item span{flex:1}
+@media(max-width:700px){.daily-controls .dropin-card{grid-column:1/-1}.live-clock{padding:12px 16px}.dropin-row{gap:12px}}
