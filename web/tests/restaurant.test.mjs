@@ -110,6 +110,21 @@ test('check-in, avslut och avbokning följer rätt ordning och frigör plats', a
   assert.equal(free.body.slots[0].bookable, true);
 });
 
+test('avslutad bokning kan ångras eller avbokas och räknas då inte längre', async () => {
+  const token = owner();
+  const b = await book({ date: '2026-10-29', time: '12:15', count: 2, mode: 'away', guests: 0 });
+  assert.equal(b.status, 201);
+  await t.call('POST', '/api/admin/booking', { id: b.body.id, action: 'checkin' }, { token });
+  await t.call('POST', '/api/admin/booking', { id: b.body.id, action: 'finish' }, { token });
+  const undo = await t.call('POST', '/api/admin/booking', { id: b.body.id, action: 'undo_finish' }, { token });
+  assert.equal(undo.status, 200, JSON.stringify(undo.body));
+  assert.equal(undo.body.bookings.find(x => x.id === b.body.id).status, 'checked_in');
+  await t.call('POST', '/api/admin/booking', { id: b.body.id, action: 'finish' }, { token });
+  const c = await t.call('POST', '/api/admin/booking', { id: b.body.id, action: 'cancel', reason: 'Testbokning' }, { token });
+  assert.equal(c.status, 200, JSON.stringify(c.body));
+  assert.equal(c.body.stats.booked, 0);
+});
+
 test('dagens pizzantal begränsar bokningar och drop-in räknas av', async () => {
   const token = owner();
   const day = await t.call('GET', '/api/admin/day?date=2026-10-28', undefined, { token });

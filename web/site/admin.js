@@ -4,7 +4,7 @@
   // Tillagt: inloggning med e-post, roller, svinn med orsak, statistik, meny, personal och inställningar.
   const $ = id => document.getElementById(id);
   const labels = { confirmed: 'Bokad', checked_in: 'Incheckad', completed: 'Avslutad', cancelled: 'Avbokad' };
-  const actionNames = { booking_created: 'Ny bokning', booking_checkin: 'Gäst incheckad', booking_undo_checkin: 'Incheckning ångrad', booking_finish: 'Bokning avslutad', booking_cancel: 'Bokning avbokad', dropin_changed: 'Drop-in ändrat', waste_changed: 'Svinn rättat', waste_registered: 'Svinn registrerat', waste_voided: 'Svinn makulerat', day_settings: 'Dagsinställningar sparade', task_create: 'Arbetsuppgift tillagd', task_update: 'Arbetsuppgift flyttad eller redigerad', task_done: 'Arbetsuppgift ändrad', task_archive: 'Arbetsuppgift borttagen', booking_email: 'Bekräftelsemejl', booking_email_requested: 'Bekräftelse begärd', date_closed: 'Datum stängt', date_reopened: 'Datum öppnat igen', settings_saved: 'Inställningar sparade', menu_saved: 'Menyn ändrad', staff_created: 'Personal tillagd', staff_role: 'Roll ändrad', staff_active: 'Personal aktiverad/inaktiverad', staff_password_reset: 'Lösenord återställt', staff_owner_bootstrap: 'Ägarkonto skapat' };
+  const actionNames = { booking_created: 'Ny bokning', booking_checkin: 'Gäst incheckad', booking_undo_checkin: 'Incheckning ångrad', booking_finish: 'Bokning avslutad', booking_cancel: 'Bokning avbokad', dropin_changed: 'Drop-in ändrat', dropin_added: 'Drop-in registrerad', dropin_voided: 'Drop-in borttagen', waste_changed: 'Svinn rättat', waste_registered: 'Svinn registrerat', waste_voided: 'Svinn makulerat', day_settings: 'Dagsinställningar sparade', task_create: 'Arbetsuppgift tillagd', task_update: 'Arbetsuppgift flyttad eller redigerad', task_done: 'Arbetsuppgift ändrad', task_archive: 'Arbetsuppgift borttagen', booking_email: 'Bekräftelsemejl', booking_email_requested: 'Bekräftelse begärd', date_closed: 'Datum stängt', date_reopened: 'Datum öppnat igen', settings_saved: 'Inställningar sparade', menu_saved: 'Menyn ändrad', staff_created: 'Personal tillagd', staff_role: 'Roll ändrad', staff_active: 'Personal aktiverad/inaktiverad', staff_password_reset: 'Lösenord återställt', staff_owner_bootstrap: 'Ägarkonto skapat' };
   const phases = { opening: 'Öppning', general: 'Under dagen', closing: 'Stängning' };
   const areas = { kitchen: 'Kök & förberedelser', service: 'Servering & lokal', hygiene: 'Hygien & toalett', other: 'Övrigt' };
   const descriptions = { opening: 'Innan vi öppnar', general: 'Håll ordning under servicen', closing: 'Innan vi går hem' };
@@ -142,7 +142,7 @@
     b.addEventListener('click', () => {
       if (action === 'cancel') {
         cancelId = row.id; $('cancel-description').textContent = row.name + ' · ' + time(row.ready_min) + ' · ' + row.count + ' pizzor'; $('cancel-reason').value = ''; $('cancel-dialog').showModal(); $('cancel-reason').focus();
-      } else mutate('booking', { id: row.id, action }, { checkin: 'Gästen är incheckad.', finish: 'Bokningen är avslutad.', undo_checkin: 'Incheckningen är ångrad.' }[action]);
+      } else mutate('booking', { id: row.id, action }, { checkin: 'Gästen är incheckad.', finish: 'Bokningen är avslutad.', undo_checkin: 'Incheckningen är ångrad.', undo_finish: 'Avslutet är ångrat.' }[action]);
     });
     return b;
   }
@@ -166,7 +166,8 @@
       const actions = el('div', undefined, 'booking-actions-list');
       if (row.status === 'confirmed') actions.append(bookingAction('Checka in', 'checkin', row, 'admin-primary'));
       if (row.status === 'checked_in') actions.append(bookingAction('Avsluta besöket', 'finish', row, 'admin-primary'), bookingAction('Ångra incheckning', 'undo_checkin', row, 'text-button'));
-      if (['confirmed', 'checked_in'].includes(row.status)) actions.append(bookingAction('Avboka', 'cancel', row, 'secondary-button'));
+      if (row.status === 'completed') actions.append(bookingAction('Ångra avslut', 'undo_finish', row, 'text-button'));
+      if (['confirmed', 'checked_in', 'completed'].includes(row.status)) actions.append(bookingAction('Avboka', 'cancel', row, 'secondary-button'));
       if (row.email && ['confirmed', 'checked_in'].includes(row.status) && !['sent', 'review', 'skipped'].includes(emailStatus) && row.date >= today()) {
         const retry = el('button', emailStatus === 'uncertain' || emailStatus === 'sending' ? 'Kontrollera mejlet' : 'Skicka bekräftelse', 'text-button'); retry.type = 'button'; retry.dataset.mutation = 'true'; retry.dataset.email = 'true';
         retry.addEventListener('click', () => mutate('email', { id: row.id }, '')); actions.append(retry);
@@ -298,10 +299,69 @@
     $('dropin-manual').value = data.day.dropin; $('waste-manual').value = data.day.waste;
     $('prepared').value = data.day.prepared === null ? '' : data.day.prepared; $('paused').checked = !!data.day.paused; $('after-closing').checked = !!data.day.allow_after_closing;
     $('limits-help').textContent = 'Gäller valt datum. ' + data.limits.slot + ' pizzor per tidslucka, ' + data.limits.hour + ' per timme och ' + data.limits.seats + ' sittplatser.';
-    renderBookings(); renderWaste(); renderTasks(); renderHistory(); lock();
+    renderBookings(); renderWaste(); renderTasks(); renderHistory(); renderDropins(); diSuggest(); lock();
     if (!isAdmin() && ['economy', 'ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(view)) switchView('day');
     if (view === 'phone') loadPhone();
   }
+
+  // ---------- Drop-in med ugnstid ----------
+  let diCount = 2, diMode = 'here', diSerial = 0, diTimer = null;
+  const diBody = () => ({ date: data.day.date, count: diCount, mode: diMode, guests: diMode === 'here' ? Math.max(1, Number($('di-guests').value) || 1) : 0 });
+  function diShow() {
+    $('di-count').textContent = diCount;
+    document.querySelectorAll('[data-di-mode]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.diMode === diMode)));
+    $('di-guests-wrap').hidden = diMode !== 'here';
+  }
+  async function diSuggest() {
+    if (!data) return;
+    const current = ++diSerial;
+    try {
+      const r = await request('dropin', { ...diBody(), action: 'suggest' });
+      if (current !== diSerial) return;
+      const box = $('di-suggest'); box.replaceChildren();
+      if (!r.time) { box.append(el('strong', 'Ingen ledig ugnstid kvar i dag')); box.className = 'dropin-suggest warn'; return; }
+      box.className = 'dropin-suggest' + (r.seatsOk ? '' : ' warn');
+      box.append(el('span', 'Klar ca '), el('strong', r.time));
+      if (r.waitMin !== null && r.waitMin !== undefined) box.append(el('span', ' · om ' + r.waitMin + ' min'));
+      if (!r.seatsOk) box.append(el('small', 'Bara ' + r.seatsFree + ' lediga platser just nu'));
+    } catch (error) { if (current === diSerial) { $('di-suggest').textContent = error.message; $('di-suggest').className = 'dropin-suggest warn'; } }
+  }
+  const diLater = () => { clearTimeout(diTimer); diTimer = setTimeout(diSuggest, 250); };
+  function renderDropins() {
+    const root = $('dropin-list'); root.replaceChildren();
+    const list = data.dropins || [];
+    if (!list.length) return;
+    root.append(el('h3', 'Dagens drop-in'));
+    list.forEach(d => {
+      const row = el('div', undefined, 'dropin-item');
+      row.append(el('strong', d.time), el('span', d.count + (d.count === 1 ? ' pizza' : ' pizzor') + ' · ' + (d.mode === 'here' ? 'Äter här' + (d.guests ? ' (' + d.guests + ')' : '') : 'Ta med')));
+      const undo = el('button', 'Ångra', 'text-button'); undo.type = 'button'; undo.dataset.mutation = 'true';
+      undo.addEventListener('click', () => mutate('dropin', { date: data.day.date, action: 'void', id: d.id }, 'Drop-in kl ' + d.time + ' är borttagen.'));
+      row.append(undo); root.append(row);
+    });
+  }
+  $('di-minus').addEventListener('click', () => { diCount = Math.max(1, diCount - 1); diShow(); diLater(); });
+  $('di-plus').addEventListener('click', () => { diCount = Math.min(100, diCount + 1); diShow(); diLater(); });
+  document.querySelectorAll('[data-di-mode]').forEach(b => b.addEventListener('click', () => { diMode = b.dataset.diMode; diShow(); diLater(); }));
+  $('di-guests').addEventListener('input', diLater);
+  $('dropin-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const ok = await mutate('dropin', { ...diBody(), action: 'add' }, '');
+    if (ok) { const d = (data.dropins || []).slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0]; if (d) note('Drop-in registrerad: ' + d.count + ' pizzor klara kl ' + d.time + '.', true); diCount = 2; diShow(); }
+  });
+  diShow();
+
+  // ---------- Klocka ----------
+  const clockFmt = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  const clockDay = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', weekday: 'long', day: 'numeric', month: 'long' });
+  let lastMinute = '';
+  function tick() {
+    const now = new Date(), text = clockFmt.format(now);
+    $('live-clock').textContent = text; $('live-clock-sub').textContent = clockDay.format(now);
+    const minute = text.slice(0, 5);
+    if (minute !== lastMinute) { if (lastMinute && data && !busy) diSuggest(); lastMinute = minute; }
+  }
+  tick(); setInterval(tick, 1000);
 
   // ---------- Telefonbokning ----------
   let phMode = 'here', phSlot = null, phAvail = null, phSerial = 0;

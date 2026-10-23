@@ -198,6 +198,10 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         return reply({ booking, email: { status: email.status } });
       }
       if (path === '/api/admin/counter' && method === 'POST') return reply(await withEmail(await rpc('api_admin_counter', { ...input, actor })));
+      if (path === '/api/admin/dropin' && method === 'POST') {
+        const out = await rpc('api_admin_dropin', { ...input, actor });
+        return reply(input?.action === 'suggest' || !input?.action ? out : await withEmail(out));
+      }
       if (path === '/api/admin/settings' && method === 'POST') return reply(await withEmail(await rpc('api_admin_save_day', { ...input, actor })));
       if (path === '/api/admin/booking' && method === 'POST') return reply(await withEmail(await rpc('api_admin_booking', { ...input, actor })));
       if (path === '/api/admin/task' && method === 'POST') return reply(await withEmail(await rpc('api_admin_task', { ...input, actor })));
