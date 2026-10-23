@@ -18,8 +18,8 @@ export function createDatabase() {
     try { execFileSync('psql', [...psqlArgs('postgres'), '-c', `create role ${role}`], { stdio: 'ignore' }); } catch { /* finns redan */ }
   }
   for (const file of migrations) execFileSync('psql', [...psqlArgs(name), '-f', file]);
-  // De äldre testerna utgår från kvartar (8 pizzor per 15 min). 0005 ställer in 4 per 8 min; egna tester för det finns i tidsluckor.test.mjs.
-  execFileSync('psql', [...psqlArgs(name), '-c', 'update settings set slot_min = 15, slot_cap = 8, sit_after_close = false where id = 1']);
+  // De äldre testerna utgår från kvartar (8 pizzor per 15 min) utan löpande kö (0010, egna tester i pizzako.test.mjs). 0005 ställer in 4 per 8 min; egna tester för det finns i tidsluckor.test.mjs.
+  execFileSync('psql', [...psqlArgs(name), '-c', 'update settings set slot_min = 15, slot_cap = 8, sit_after_close = false, pizza_min = null where id = 1']);
   return name;
 }
 

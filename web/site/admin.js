@@ -675,11 +675,11 @@
   }
 
   // ---------- Inställningar ----------
-  const cfgFields = ['slotCap', 'slotMin', 'hourCap', 'seats', 'sittingMin', 'arrivalMin', 'horizonDays', 'maxCount', 'maxGuests', 'avgPizzaPrice', 'wasteCost'];
-  const cfgColumns = { slotCap: 'slot_cap', slotMin: 'slot_min', hourCap: 'hour_cap', seats: 'seats', sittingMin: 'sitting_min', arrivalMin: 'arrival_min', horizonDays: 'horizon_days', maxCount: 'max_count', maxGuests: 'max_guests', avgPizzaPrice: 'avg_pizza_price', wasteCost: 'waste_cost' };
+  const cfgFields = ['pizzaMin', 'slotCap', 'slotMin', 'hourCap', 'seats', 'sittingMin', 'arrivalMin', 'horizonDays', 'maxCount', 'maxGuests', 'avgPizzaPrice', 'wasteCost'];
+  const cfgColumns = { pizzaMin: 'pizza_min', slotCap: 'slot_cap', slotMin: 'slot_min', hourCap: 'hour_cap', seats: 'seats', sittingMin: 'sitting_min', arrivalMin: 'arrival_min', horizonDays: 'horizon_days', maxCount: 'max_count', maxGuests: 'max_guests', avgPizzaPrice: 'avg_pizza_price', wasteCost: 'waste_cost' };
   async function loadConfig() { const result = await adminCall('config'); if (result) { config = result; renderConfig(); } }
   function renderConfig() {
-    cfgFields.forEach(f => { $('cfg-' + f).value = config[cfgColumns[f]]; });
+    cfgFields.forEach(f => { $('cfg-' + f).value = config[cfgColumns[f]] ?? 0; });
     $('cfg-sitAfterClose').checked = !!config.sit_after_close;
     ['lunchFirst', 'lunchLast', 'dinnerFirst', 'dinnerLast'].forEach(f => { $('cfg-' + f).value = time(config[f.replace(/[A-Z]/, c => '_' + c.toLowerCase())]); });
     const boxes = $('weekday-boxes'); boxes.replaceChildren();
