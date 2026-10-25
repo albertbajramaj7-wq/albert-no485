@@ -97,6 +97,33 @@ sammanställd data via verktyg i `lib/ai.js` – inga gästuppgifter skickas och
   `SUPABASE_DB_URL` och `BACKUP_PASSPHRASE` som GitHub Actions-hemligheter.
 - Integritetspolicy: `/integritet/`. Visar "Albert NO.485", adress och telefon (bolagsnamn och org.nr visas inte, enligt Albert).
 
+## Ekonomi & Bank (Danske Bank, endast läsning)
+
+Saldo, transaktioner, kassaflödesprognos (7/14/30 dagar), matchning mot Fortnox och AI-frågor.
+Banken kan aldrig ändras härifrån: koden släpper bara igenom läsningar som står på en lista
+(lista konton, saldo, transaktioner) och banken ger bara behörigheten `accounts`.
+
+**Vem ser det:** ägaren. Administratörer bara om ägaren bockar i dem under Ekonomi & Bank → Behörighet. Personal aldrig.
+
+**Miljöer** (inställningen `DANSKE_ENV` i Vercel):
+- Inte satt: förhandsvisningen använder bankens testdata (mock), riktiga sidan är avstängd.
+- `sandbox`: bankens testmiljö. Kräver nycklarna nedan.
+- `live`: riktiga bankdata. Kräver nycklarna nedan **och** `DANSKE_LIVE_ENABLED=ja`.
+Test- och riktiga data sparas åtskilda och blandas aldrig.
+
+**Det här behöver ordnas med Danske Bank innan riktiga data:**
+1. District-avtal för företaget (eller utökning av befintligt) som omfattar Premium API.
+2. Registrering på bankens API-plattform och abonnemang på *Account Transaction & Balance API*.
+3. Ett digitalt certifikat (klientcertifikat) registrerat hos banken, plus ett Client ID.
+4. Bekräftelse från banken att API:et gäller företagets svenska konton.
+5. En teknisk användare med läsbehörighet (enquiry) till rätt konton – inga betalningsbehörigheter.
+
+**Lägg in i Vercel (aldrig i chatten):** `DANSKE_CLIENT_ID`, `DANSKE_CLIENT_CERT_PEM`, `DANSKE_CLIENT_KEY_PEM`,
+eventuellt `DANSKE_CLIENT_KEY_PASSPHRASE`. Certifikat och nyckel kan klistras in som PEM-text eller base64.
+
+Banken hämtas automatiskt varje natt och med knappen "Hämta från banken". Varje hämtning och läsning loggas
+(utan nycklar) och syns under Behörighet → Åtkomstlogg.
+
 ## För utvecklare
 - Testerna kräver en lokal Postgres (`psql` i PATH): `PGHOST=... PGPORT=... PGUSER=... npm test`
 - Lokal förhandsvisning med låtsas-inloggning: `node tests/dev-server.mjs`, öppna http://localhost:8787

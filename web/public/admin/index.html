@@ -29,6 +29,7 @@
       <button type="button" data-view="history">Historik</button>
       <hr data-role="admin" hidden>
       <button type="button" data-view="ai" data-role="admin" hidden>AI-assistent</button>
+      <button type="button" data-view="bank" data-role="admin" data-feature="finance" hidden>Ekonomi &amp; Bank <span class="lock-tag" aria-label="låst">🔒</span></button>
       <button type="button" data-view="economy" data-role="admin" data-feature="finance" hidden>Ekonomi <span class="lock-tag" aria-label="låst">🔒</span></button>
       <button type="button" data-view="budget" data-role="admin" data-feature="finance" hidden>Veckobudget <span class="lock-tag" aria-label="låst">🔒</span></button>
       <button type="button" data-view="stats" data-role="admin" hidden>Statistik</button>
@@ -187,6 +188,47 @@
           </div>
           <form id="ai-form" class="ai-form"><label for="ai-input" class="visually-hidden">Din fråga</label><textarea id="ai-input" rows="2" maxlength="2000" placeholder="Skriv din fråga …"></textarea><button type="submit" id="ai-send" class="admin-primary">Skicka</button></form>
         </section>
+      </section>
+
+      <section data-panel="bank" data-finance-panel hidden>
+        <div class="finance-lock-banner" data-finance-lock><strong>Endast som referens.</strong> Du kan titta, filtrera och hämta från banken, men inte ändra kategorier eller behörigheter förrän ekonomin är upplåst.</div>
+        <div class="section-heading eco-heading"><div><p class="bank-status" id="bank-status">Hämtar …</p><p class="muted" id="bank-sub"></p></div><button type="button" id="bank-sync" class="secondary-button finance-free">Hämta från banken</button></div>
+        <div id="bank-warn" class="budget-warnings" hidden></div>
+        <div class="day-summary key-figures" id="bank-figures"></div>
+        <div class="eco-grid">
+          <section class="admin-card bank-forecast"><h2>Kassaflödesprognos</h2>
+            <div class="bank-tabs finance-free" role="tablist"><button type="button" data-horizon="0" class="finance-free" aria-selected="true">7 dagar</button><button type="button" data-horizon="1" class="finance-free" aria-selected="false">14 dagar</button><button type="button" data-horizon="2" class="finance-free" aria-selected="false">30 dagar</button></div>
+            <div id="bank-forecast"></div><p class="field-help" id="bank-forecast-note"></p></section>
+          <section class="admin-card"><h2>Kostnader per kategori</h2><p class="muted">Denna månad jämfört med samma dagar förra månaden.</p><div id="bank-categories"></div></section>
+          <section class="admin-card"><h2>Största kostnaderna</h2><p class="muted">Denna månad, per mottagare.</p><div id="bank-top"></div></section>
+          <section class="admin-card"><h2>Fortnox-matchning</h2><p class="muted" id="bank-fortnox-sub"></p><div id="bank-fortnox"></div></section>
+        </div>
+        <section class="admin-card bank-ai"><h2>Fråga AI om ekonomin</h2><p class="muted">Assistenten läser bara – den kan aldrig betala eller flytta pengar. Prognoser märks som uppskattningar.</p>
+          <div class="bank-chips">
+            <button type="button" class="secondary-button finance-free" data-bank-q="Hur mycket har företaget spenderat denna månad, och på vad?">Spenderat denna månad</button>
+            <button type="button" class="secondary-button finance-free" data-bank-q="Vilka är våra största kostnader just nu?">Största kostnaderna</button>
+            <button type="button" class="secondary-button finance-free" data-bank-q="Hur mycket pengar har kommit in denna vecka?">Inkommet denna vecka</button>
+            <button type="button" class="secondary-button finance-free" data-bank-q="Hur har kassaflödet utvecklats senaste månaderna?">Kassaflödet</button>
+            <button type="button" class="secondary-button finance-free" data-bank-q="Vilka utgifter har ökat jämfört med förra månaden?">Ökade utgifter</button>
+            <button type="button" class="secondary-button finance-free" data-bank-q="Hur mycket pengar behöver vi för att täcka kommande kostnader de närmaste 30 dagarna?">Kommande kostnader</button>
+          </div></section>
+        <section class="admin-card bank-tx"><h2>Transaktioner <span class="heading-count" id="bank-tx-count"></span></h2>
+          <form id="bank-filter" class="bank-filter">
+            <div class="bank-q"><label for="bf-q">Sök</label><input id="bf-q" class="finance-free" type="search" maxlength="80" placeholder="Mottagare eller referens"></div>
+            <div><label for="bf-from">Från</label><input id="bf-from" class="finance-free" type="date"></div>
+            <div><label for="bf-to">Till</label><input id="bf-to" class="finance-free" type="date"></div>
+            <div><label for="bf-category">Kategori</label><select id="bf-category" class="finance-free"><option value="">Alla</option></select></div>
+            <div><label for="bf-direction">Typ</label><select id="bf-direction" class="finance-free"><option value="">In och ut</option><option value="in">Insättningar</option><option value="out">Utbetalningar</option></select></div>
+            <div><label for="bf-min">Belopp från</label><input id="bf-min" class="finance-free" type="number" min="0" inputmode="decimal"></div>
+            <div><label for="bf-max">Belopp till</label><input id="bf-max" class="finance-free" type="number" min="0" inputmode="decimal"></div>
+            <button type="submit" class="admin-primary finance-free">Filtrera</button>
+          </form>
+          <p class="muted" id="bank-tx-sum"></p>
+          <div class="table-scroll"><table class="data-table bank-table" id="bank-tx"></table></div>
+          <button type="button" id="bank-more" class="text-button finance-free" hidden>Visa fler</button>
+        </section>
+        <section class="admin-card" id="bank-access-card" hidden><h2>Behörighet</h2><p class="muted">Bara du som ägare ser Ekonomi &amp; Bank automatiskt. Administratörer måste få behörighet här. Övrig personal kan aldrig se bankdata.</p><div id="bank-access"></div>
+          <details class="manual-counter"><summary>Åtkomstlogg</summary><div id="bank-log" class="waste-list"></div></details></section>
       </section>
 
       <section data-panel="economy" data-finance-panel hidden>

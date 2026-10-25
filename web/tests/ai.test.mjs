@@ -43,7 +43,7 @@ test('AI svarar med hjälp av verktyg och får inga personuppgifter', async () =
   const sent = JSON.stringify(requests[1]);
   assert.ok(sent.includes('18:00'), 'bokningen per färdigtid ska finnas med');
   for (const secret of ['Anna Andersson', 'anna@example.se', '070-123 45 67', 'albert@albertno485.com']) assert.ok(!sent.includes(secret), 'personuppgift läckte: ' + secret);
-  assert.equal(requests[0].tools.length, 7);
+  assert.equal(requests[0].tools.length, 8);
 });
 
 test('utan nyckel visas tydligt meddelande', async () => {

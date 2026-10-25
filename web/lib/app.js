@@ -5,6 +5,7 @@ import { emailConfiguration, sendBookingEmail } from './email.js';
 import { BudgetError, computeBudget, normalizeSettings, normalizeWeek } from './budget.js';
 import { askAi, aiConfig } from './ai.js';
 import { authorizeUrl, completeConnect, fortnoxConfig, fortnoxSummary, randomState, syncFortnox } from './fortnox.js';
+import { bankConfig, bankStatus, forecast, matchFortnox, syncBank } from './bank.js';
 
 const AT = 'alb_at', RT = 'alb_rt';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,7 +38,7 @@ function stockholmToday(now) {
  * deps: { rpc, auth, env, now?: () => Date, fetcher? }
  * Returnerar en funktion (Request) => Promise<Response>.
  */
-export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher = fetch, diagnose }) {
+export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher = fetch, diagnose, bankTransport }) {
   const ownerEmail = (env.ADMIN_OWNER_EMAIL || '').trim().toLowerCase();
 
   // Spärr mot för många försök. Bara en hash av IP-adressen används. Saknas funktionen
@@ -160,6 +161,9 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         if (fortnoxConfig(env).configured) {
           try { result.fortnox = (await syncFortnox({ rpc, env, fetcher, now, by: 'Automatiskt (natt)' })).syncedAt; } catch (error) { result.fortnox = 'fel'; }
         }
+        if (bankConfig(env).configured) {
+          try { result.bank = (await syncBank({ rpc, env, fetcher, transport: bankTransport, now, by: 'Automatiskt (natt)' })).added; } catch (error) { result.bank = 'fel'; }
+        }
         return json({ ok: true, ...result });
       }
       if (path === '/api/cron/fortnox' && method === 'GET') {
@@ -254,6 +258,33 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         if (input.action === 'sync') { await rpc('api_fortnox', { actor, action: 'status' }); return reply(await summary(await syncFortnox({ rpc, env, fetcher, now, by: s.actor.name }))); }
         if (input.action === 'save_map') return reply(await summary(await rpc('api_fortnox', { actor, action: 'save_map', supplierMap: input.supplierMap, bankAccount: input.bankAccount })));
         if (input.action === 'disconnect') return reply(await summary(await rpc('api_fortnox', { actor, action: 'disconnect' })));
+        throw new AppError(400, 'Okänd åtgärd.');
+      }
+      if (path === '/api/admin/bank') {
+        // Ekonomi & Bank: ENDAST LÄSNING. Behörighet (ägare / admin med bankbehörighet) kontrolleras i databasen.
+        const cfg = bankConfig(env), status = bankStatus(env);
+        const access = await rpc('api_bank', { actor, action: 'access' }); // 403 för personal och admin utan bankbehörighet
+        const act = method === 'GET' ? (q('view') || 'overview') : String(input.action || '');
+        if (act === 'access') return reply(await rpc('api_bank', { actor, action: 'access', userId: input.userId ?? null, allow: input.allow }));
+        if (!cfg.env) {
+          if (act === 'overview') return reply({ status, overview: null, access: access?.admins ? { admins: access.admins } : null });
+          throw new AppError(409, 'Bankkopplingen är avstängd i den här miljön.');
+        }
+        const e = cfg.env;
+        if (act === 'sync') { const r = await syncBank({ rpc, env, fetcher, transport: bankTransport, now, by: s.actor.name }); return reply({ status, sync: r }); }
+        if (act === 'set_category') return reply(await rpc('api_bank', { actor, action: 'set_category', env: e, id: input.id, category: input.category }));
+        if (act === 'log') return reply(await rpc('api_bank', { actor, action: 'log', env: e }));
+        if (act === 'transactions') {
+          const f = method === 'GET' ? Object.fromEntries(['from', 'to', 'q', 'category', 'min', 'max', 'direction', 'limit', 'offset'].map(k => [k, q(k)])) : input;
+          return reply(await rpc('api_bank', { actor, action: 'transactions', env: e, from: f.from, to: f.to, q: f.q, category: f.category, min: f.min, max: f.max, direction: f.direction, limit: f.limit, offset: f.offset }));
+        }
+        if (act === 'overview') {
+          const data = await rpc('api_bank', { actor, action: 'analysis_data', env: e });
+          let payables = null;
+          try { payables = (await rpc('api_fortnox', { actor, action: 'status' }))?.overview?.payables || null; } catch { payables = null; }
+          return reply({ status, overview: data.overview, forecast: forecast({ overview: data.overview, transactions: data.transactions, today: data.today, payables }),
+            fortnox: matchFortnox({ transactions: data.transactions, payables, today: data.today }), access: access?.admins ? { admins: access.admins } : null });
+        }
         throw new AppError(400, 'Okänd åtgärd.');
       }
       if (path === '/api/admin/menu') return reply(await rpc('api_admin_menu', method === 'GET' ? { actor } : { actor, action: 'save', item: input.item }));

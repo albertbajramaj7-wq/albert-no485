@@ -382,7 +382,7 @@
 
 /* Låst ekonomi: syns som referens, går inte att använda */
 .finance-lock-banner{margin:0 0 16px;padding:12px 16px;border-radius:12px;border:1px solid rgba(120,90,60,.35);background:rgba(120,90,60,.08);color:inherit;font-size:.92rem;line-height:1.45}
-.finance-locked input,.finance-locked select,.finance-locked textarea,.finance-locked button{cursor:not-allowed;opacity:.55}
+.finance-locked input:disabled,.finance-locked select:disabled,.finance-locked textarea:disabled,.finance-locked button:disabled{cursor:not-allowed;opacity:.55}
 .lock-tag{font-size:.75em;margin-left:2px;opacity:.75}
 
 /* Klocka */
@@ -411,3 +411,34 @@
 .dropin-item strong{font-size:18px;font-variant-numeric:tabular-nums;min-width:52px}
 .dropin-item span{flex:1}
 @media(max-width:700px){.daily-controls .dropin-card{grid-column:1/-1}.live-clock{padding:12px 16px}.dropin-row{gap:12px}}
+
+/* Ekonomi & Bank */
+.bank-status{margin:0 0 4px;font-size:15px;display:flex;flex-wrap:wrap;align-items:center;gap:4px}
+.bank-badge{display:inline-block;font:600 10px/1 var(--ex-sans);letter-spacing:.06em;text-transform:uppercase;padding:4px 7px;border-radius:999px;border:1px solid var(--ex-line-2);color:var(--ex-brown);background:var(--ex-paper);white-space:nowrap}
+.bank-badge.readonly{background:var(--ex-brown);color:var(--ex-ivory);border-color:var(--ex-brown)}
+.bank-badge.test{background:#fbf1ec;border-color:#d9b8a6;color:#9a4a2e}
+.bank-badge.actual{background:#eef2ea;border-color:#c9d3bf;color:#46533a}
+.bank-badge.estimate{background:#fbf6ea;border-color:#e3d3a8;color:#8a6a1e}
+.bank-badge.warn{background:#fbf1ec;border-color:#d9b8a6;color:#9a4a2e}
+.bank-badge.plain{color:var(--ex-taupe)}
+.bank-tabs{display:flex;gap:6px;margin:12px 0}
+.bank-tabs button{border:1px solid var(--ex-line-2);background:var(--ex-card);color:var(--ex-brown);border-radius:999px;padding:8px 14px;min-height:40px;font-size:13px;cursor:pointer}
+.bank-tabs button[aria-selected="true"]{background:var(--ex-brown);color:var(--ex-ivory);border-color:var(--ex-brown)}
+.bank-line{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--ex-line);font-size:14px}
+.bank-line strong{font-variant-numeric:tabular-nums;white-space:nowrap}
+.bank-line.total{border-top:2px solid var(--ex-ink);font-size:16px}
+.bank-line strong.negative{color:#9a4a2e}
+.bank-right{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
+.bank-summary{font-size:14px;margin:0 0 8px}
+.bank-ai,.bank-tx,#bank-access-card{margin-top:16px}
+.bank-chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.bank-chips button{font-size:13px}
+.bank-filter{display:grid;grid-template-columns:2fr repeat(6,minmax(0,1fr)) auto;gap:10px;align-items:end;margin:14px 0 8px}
+.bank-filter label{display:block;font-size:12px;color:var(--ex-taupe);margin-bottom:4px}
+.bank-filter input,.bank-filter select{width:100%;min-width:0}
+.bank-table td{font-size:13px;vertical-align:middle}
+.bank-table td.num{text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums}
+.bank-table td.neg{color:#9a4a2e}.bank-table td.pos{color:#46533a}
+.bank-table select{font-size:12px;padding:6px 8px;min-height:36px}
+@media(max-width:1050px){.bank-filter{grid-template-columns:repeat(4,minmax(0,1fr))}.bank-filter .bank-q{grid-column:1/-1}}
+@media(max-width:700px){.admin-app .eco-grid{grid-template-columns:1fr}.bank-filter{grid-template-columns:1fr 1fr}.bank-filter button{grid-column:1/-1}}
