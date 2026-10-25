@@ -199,3 +199,7 @@ test('granskning: felaktiga filter ger 400, synk bara via POST, behörighet för
   sql(t.db, `update staff set role = 'admin' where user_id = '${adminId}'`);
   assert.equal((await t.call('GET', '/api/admin/bank', undefined, { token: admin })).status, 403);
 });
+
+test('testtjänstens adress följer bankens OpenAPI-specifikation', () => {
+  assert.equal(bankConfig({ VERCEL_ENV: 'preview' }).hosts.api, 'https://mock-api.danskebank.com/mock/sandbox/1.3.7/account-transaction-balance-api/v1/account-transaction-service');
+});

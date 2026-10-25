@@ -17,8 +17,8 @@ export class BankReadOnlyError extends Error {}
 // Källa: developers.danskebank.com/premium-apis/account-transaction--and--balance-api
 const DANSKE = {
   mock: {
-    // Mönster enligt bankens Mock Service-sida. Exakt adress bekräftas mot API-specifikationen.
-    api: 'https://mock-api.danskebank.com/mock/sandbox/v1/account-transaction-service',
+    // Enligt bankens OpenAPI-specifikation (version 1.3.7). Testtjänsten slumpar alla svarskoder med flit.
+    api: 'https://mock-api.danskebank.com/mock/sandbox/1.3.7/account-transaction-balance-api/v1/account-transaction-service',
     token: null,
   },
   sandbox: {
@@ -36,7 +36,7 @@ const READ_ONLY_PATHS = [
   /^\/accounts\/[A-Za-z0-9._~-]{1,120}\/balances$/,
   /^\/accounts\/[A-Za-z0-9._~-]{1,120}\/transactions$/,
 ];
-const READ_ONLY_QUERY = new Set(['offset', 'limit', 'bookingDateFrom', 'bookingDateTo']);
+const READ_ONLY_QUERY = new Set(['offset', 'limit', 'bookingDateFrom', 'bookingDateTo', 'aspspParameters']);
 export const EARLIEST_BOOKING_DATE = '2025-03-01'; // enligt bankens dokumentation
 
 const pem = v => { const s = String(v || '').trim(); if (!s) return ''; return s.includes('-----BEGIN') ? s.replace(/\\n/g, '\n') : Buffer.from(s, 'base64').toString('utf8'); };
@@ -106,15 +106,16 @@ function makeClient(cfg, { fetcher, transport }) {
   let token = null;
   async function readOnlyRequest(method, urlText, init = {}) {
     assertReadOnly(cfg, method, urlText);
-    for (let attempt = 0; attempt < 3; attempt++) {
+    const tries = cfg.mode === 'mock' ? 6 : 3;
+    for (let attempt = 0; attempt < tries; attempt++) {
       const res = await send(urlText, { ...init, method });
       // Testtjänsten (mock) svarar med slumpmässiga fel med flit – försök igen några gånger.
-      const retry = res.status === 429 || res.status >= 500 || (cfg.mode === 'mock' && ![401, 403, 404].includes(res.status) && !res.ok);
-      if (retry && attempt < 2) { await new Promise(r => setTimeout(r, 400 * (attempt + 1))); continue; }
+      const retry = res.status === 429 || res.status >= 500 || (cfg.mode === 'mock' && !res.ok);
+      if (retry && attempt < tries - 1) { await new Promise(r => setTimeout(r, cfg.mode === 'mock' ? 150 : 400 * (attempt + 1))); continue; }
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
         const step = method === 'POST' ? 'inloggning' : /\/balances$/.test(new URL(urlText).pathname) ? 'saldo' : /\/transactions$/.test(new URL(urlText).pathname) ? 'transaktioner' : 'kontolista';
-        const why = body?.error_description || body?.message || body?.error || body?.title || body?.detail;
+        const why = body?.details || body?.error_description || body?.message || body?.error || body?.title;
         const err = new AppError(502, 'Banken svarade med fel ' + res.status + ' (' + step + ')' + (why ? ': ' + String(why).slice(0, 120) : '') + '.');
         err.bankStatus = res.status; throw err;
       }
@@ -141,6 +142,7 @@ function makeClient(cfg, { fetcher, transport }) {
 const num = v => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? Math.round(n * 100) / 100 : null; };
 const str = (v, n = 200) => (v === null || v === undefined ? '' : String(v)).replace(/\s+/g, ' ').trim().slice(0, n);
 const date = v => /^\d{4}-\d{2}-\d{2}/.test(String(v || '')) ? String(v).slice(0, 10) : null;
+const nextQuery = href => { if (!href) return null; try { const u = new URL(String(href), 'https://x.invalid'); const o = {}; for (const [k, v] of u.searchParams) if (READ_ONLY_QUERY.has(k) && v.length <= 100) o[k] = v; return Object.keys(o).length ? o : null; } catch { return null; } };
 const offsetOf = href => { try { return new URL(String(href), 'https://x.invalid').searchParams.get('offset'); } catch { return null; } };
 
 // ---------- Kategorier (regler; kan ändras per transaktion i admin) ----------
@@ -174,9 +176,14 @@ export function normalizeTransaction(raw, accountId) {
   const t = {
     account: accountId, date: bookingDate, valueDate: date(raw?.valueDate),
     amount, currency: str(raw?.transactionAmount?.currency || raw?.currency || 'SEK', 3).toUpperCase(),
-    counterparty: str(raw?.creditor?.name || raw?.debtor?.name || raw?.creditorName || raw?.debtorName || raw?.counterpartyName),
-    reference: str(Array.isArray(rem) ? rem.join(' ') : rem || raw?.remittanceInformationStructured || raw?.reference, 300),
-    type: str(typeof code === 'string' ? code : code ? [code.domain, code.family, code.subFamily, code.code].filter(Boolean).join(' / ') : '', 80) || (amount < 0 ? 'Utbetalning' : 'Insättning'),
+    // Utbetalning: motparten är mottagaren (creditor). Insättning: avsändaren (debtor).
+    counterparty: str(amount < 0
+      ? raw?.creditor?.name || raw?.ultimateCreditor?.name || raw?.debtor?.name
+      : raw?.debtor?.name || raw?.ultimateDebtor?.name || raw?.creditor?.name),
+    reference: str([Array.isArray(rem) ? rem.join(' ') : rem,
+      ...(Array.isArray(raw?.remittanceInformationStructured) ? raw.remittanceInformationStructured.map(x => x?.creditorReferenceInformation?.reference || (x?.referredDocumentInformation || []).map(d => d?.number).join(' ')) : []),
+      raw?.additionalTransactionInformation].filter(Boolean).join(' '), 300),
+    type: str([typeof code === 'string' ? code : '', raw?.bankTransactionCodeProprietary].filter(Boolean).join(' · '), 80) || (amount < 0 ? 'Utbetalning' : 'Insättning'),
     transactionId: raw?.transactionId === null || raw?.transactionId === undefined ? '' : String(raw.transactionId).slice(0, 500),
   };
   t.category = categorize(t);
@@ -236,16 +243,18 @@ export async function syncBank({ rpc, env, fetcher, transport, now = () => new D
     for (const a of accounts) {
       Object.assign(a, pickBalance(await client.get('/accounts/' + a.id + '/balances')));
       const limit = 1000;
-      let off = null;
-      const rows = [];
+      let q = { bookingDateFrom: from, limit: String(limit) };
+      const rows = [], seenPages = new Set();
       for (let page = 0; page < 20; page++) {
-        const q = { bookingDateFrom: from, limit: String(limit) };
-        if (off) q.offset = off;
         const body = await client.get('/accounts/' + a.id + '/transactions', q);
-        const list = Array.isArray(body?.transactions) ? body.transactions : Array.isArray(body?.transactions?.booked) ? body.transactions.booked : [];
+        const list = Array.isArray(body?.transactions) ? body.transactions : [];
         for (const r of list) { const t = normalizeTransaction(r, a.id); if (t) rows.push({ ...t, raw: r }); }
-        off = body?.next?.href ? offsetOf(body.next.href) : null;
-        if (!off || list.length < limit) break;
+        // Nästa sida: bara tillåtna parametrar från bankens next.href (allt annat ignoreras).
+        const next = nextQuery(body?.next?.href);
+        if (!next || list.length < limit) break;
+        const merged = { bookingDateFrom: from, limit: String(limit), ...next };
+        const sig = JSON.stringify(merged); if (seenPages.has(sig)) break; seenPages.add(sig);
+        q = merged;
       }
       transactions.push(...withKeys(rows));
     }
