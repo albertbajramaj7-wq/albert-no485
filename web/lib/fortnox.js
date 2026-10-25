@@ -89,6 +89,27 @@ async function api(fetcher, token, path) {
   return body;
 }
 
+// Text-svar (SIE-export). Samma felhantering som api().
+async function apiText(fetcher, token, path) {
+  const response = await fetcher(API + path, { headers: { Authorization: 'Bearer ' + token, Accept: 'text/plain, */*' } });
+  if (!response.ok) {
+    const step = path.split('?')[0].replace(/^\//, '').split('/')[0];
+    throw Object.assign(new AppError(502, 'Fortnox svarade ' + response.status + ' på ' + step + '.'), { fortnoxStatus: response.status });
+  }
+  return response.text();
+}
+
+// SIE typ 1 (årssaldon): #UB = utgående saldo för balanskonton, #RES = årets resultat per resultatkonto.
+// Till skillnad från kontolistan räknas allt som är bokfört i år med, även ett företags första år.
+export function parseSie(text) {
+  const out = new Map();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const m = line.match(/^#(UB|RES)\s+0\s+(\d{4})\s+(-?\d+(?:[.,]\d+)?)/);
+    if (m) out.set(Number(m[2]), Math.round(Number(m[3].replace(',', '.')) * 100) / 100);
+  }
+  return out;
+}
+
 const day = d => d.toISOString().slice(0, 10);
 const money = v => { const n = Number(String(v ?? '').replace(',', '.')); return Number.isFinite(n) ? Math.round(n * 100) / 100 : null; };
 
@@ -147,6 +168,8 @@ export async function syncFortnox({ rpc, env, fetcher, now = () => new Date(), b
     await rpc('api_fortnox_system', { action: 'save_error', error: message }).catch(() => {});
     throw new AppError(502, message);
   }
+  // Banksaldot från SIE (bokfört i år) är mer rätt än kontolistans ingående balans.
+  if (overview?.source === 'SIE') bankBalance = overview.balances.bankAccount;
   if (overview) { try { await rpc('api_fortnox_overview', { overview }); } catch { errors.push('Översikten sparades inte (kör 0007_fortnox_ekonomi.sql i Supabase).'); } }
   const status = await rpc('api_fortnox_system', { action: 'save_sync', bankBalance, supplierInvoices: invoices.filter(i => /^\d{4}-\d{2}-\d{2}$/.test(i.date) && i.total !== null), by });
   if (errors.length) return await rpc('api_fortnox_system', { action: 'save_error', error: errors.join(' ') });
@@ -163,15 +186,22 @@ async function buildOverview({ fetcher, token, today, tryPaths, bankAccount }) {
   const years = (await tryPaths(['/financialyears', '/financialyears?date=' + today]))?.FinancialYears || [];
   const fy = years.find(y => y.FromDate <= today && y.ToDate >= today) || years[years.length - 1] || null;
   // Alla konton med utgående saldo (bokfört hittills i år)
-  const accounts = [];
+  const accounts = [], names = new Map(), carried = new Map();
   for (let page = 1; page <= 10; page++) {
     const r = await tryPaths([...(fy ? ['/accounts?financialyear=' + fy.Id + '&limit=500&page=' + page] : []), '/accounts?limit=500&page=' + page]);
     for (const a of r?.Accounts || []) {
       const n = Number(a.Number), v = money(a.BalanceCarriedForward);
-      if (Number.isInteger(n) && v !== null && v !== 0) accounts.push({ n, name: String(a.Description || '').slice(0, 60), v });
+      if (!Number.isInteger(n)) continue;
+      names.set(n, String(a.Description || '').slice(0, 60));
+      if (v !== null && v !== 0) carried.set(n, v);
     }
     if (page >= Number(r?.MetaInformation?.['@TotalPages'] || 1)) break;
   }
+  // Saldon: helst från SIE-exporten (räknar med allt bokfört i år). Annars kontolistans värden.
+  let values = null, source = 'kontolistan';
+  try { values = parseSie(await apiText(fetcher, token, '/sie/1' + (fy ? '?financialyear=' + fy.Id : ''))); source = 'SIE'; }
+  catch (e) { notes.push('Årets bokföring kunde inte läsas via SIE-export, saldona kan vara ofullständiga.'); }
+  for (const [n, v] of (values && values.size ? values : carried)) if (v) accounts.push({ n, name: names.get(n) || 'Konto ' + n, v });
   const neg = x => Math.round(-x * 100) / 100;
   const revenue = neg(sumAcc(accounts, 3000, 3999));
   const goods = sumAcc(accounts, 4000, 4999), external = sumAcc(accounts, 5000, 6999), staff = sumAcc(accounts, 7000, 7699), depreciation = sumAcc(accounts, 7700, 7899);
@@ -208,7 +238,7 @@ async function buildOverview({ fetcher, token, today, tryPaths, bankAccount }) {
   } catch (e) { notes.push(e.fortnoxStatus === 403 || /behörighet/.test(e.message) ? 'Kundfakturor: lägg till behörigheten Faktura i Fortnox utvecklarportal för att se dem.' : 'Kundfakturor kunde inte hämtas.'); }
   const top = (a, b, n) => accounts.filter(x => inRange(x.n, a, b)).sort((x, y) => Math.abs(y.v) - Math.abs(x.v)).slice(0, n).map(x => ({ account: x.n, name: x.name, amount: Math.round(Math.abs(x.v) * 100) / 100 }));
   return {
-    asOf: today, financialYear: fy ? { from: fy.FromDate, to: fy.ToDate } : null, balances,
+    asOf: today, source, financialYear: fy ? { from: fy.FromDate, to: fy.ToDate } : null, balances,
     result: { revenue, goods, external, staff, depreciation, financial, result, goodsPct: pct(goods), staffPct: pct(staff), externalPct: pct(external) },
     topCosts: top(4000, 7999, 8), topRevenue: top(3000, 3999, 5), payables, receivables, notes,
   };

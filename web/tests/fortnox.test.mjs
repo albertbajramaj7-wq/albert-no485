@@ -38,6 +38,9 @@ async function fakeFortnox(url, init = {}) {
     { Number: 2710, Description: 'Personalskatt', BalanceCarriedForward: -8000 }, { Number: 2731, Description: 'Arbetsgivaravgifter', BalanceCarriedForward: -9000 },
     { Number: 3001, Description: 'Försäljning', BalanceCarriedForward: -500000 }, { Number: 4010, Description: 'Varuinköp', BalanceCarriedForward: 140000 },
     { Number: 5010, Description: 'Lokalhyra', BalanceCarriedForward: 120000 }, { Number: 7010, Description: 'Löner', BalanceCarriedForward: 150000 } ] });
+  if (url.includes('/sie/1')) return new Response(['#FLAGGA 0', '#SIETYP 1', '#RAR 0 20260101 20261231', '#KONTO 1930 "Företagskonto"',
+    '#UB 0 1930 150000.25', '#UB 0 1630 5000', '#UB 0 2440 -20000', '#UB 0 2650 -15000', '#UB 0 2710 -8000', '#UB 0 2731 -9000',
+    '#RES 0 3001 -600000', '#RES 0 4010 150000', '#RES 0 5010 120000', '#RES 0 7010 150000'].join('\r\n'), { status: 200 });
   if (url.includes('/invoices?')) return new Response(JSON.stringify({ ErrorInformation: { message: 'Saknar behörighet' } }), { status: 403 });
   return new Response('{}', { status: 404 });
 }
@@ -78,11 +81,12 @@ test('koppla Fortnox, hämta saldo och fakturor, nycklar sparas krypterat', asyn
 
   const status = await t.call('GET', '/api/admin/fortnox', undefined, { token: owner });
   assert.equal(status.body.connected, true); assert.equal(status.body.companyName, 'Test AB');
-  assert.equal(status.body.bankBalance, 123456.5);
+  assert.equal(status.body.bankBalance, 150000.25); // från SIE (bokfört i år)
   const o = status.body.overview;
   assert.ok(o, 'översikten ska finnas');
-  assert.equal(o.result.revenue, 500000); assert.equal(o.result.goods, 140000); assert.equal(o.result.result, 90000);
-  assert.equal(o.result.goodsPct, 28); assert.equal(o.balances.taxAccount, 5000); assert.equal(o.balances.vatToPay, 15000);
+  assert.equal(o.source, 'SIE');
+  assert.equal(o.result.revenue, 600000); assert.equal(o.result.goods, 150000); assert.equal(o.result.result, 180000);
+  assert.equal(o.result.goodsPct, 25); assert.equal(o.balances.taxAccount, 5000); assert.equal(o.balances.vatToPay, 15000);
   assert.equal(o.balances.payables, 20000); assert.equal(o.balances.employerFees, 9000);
   assert.equal(o.receivables, null); assert.ok(o.notes.some(n => n.includes('Faktura')));
   assert.ok(o.payables.count >= 1);
@@ -94,7 +98,7 @@ test('koppla Fortnox, hämta saldo och fakturor, nycklar sparas krypterat', asyn
   assert.equal(mapped.status, 200, JSON.stringify(mapped.body));
   assert.deepEqual(mapped.body.suggestions, { '2026-10-12': { wood: 2000 } });
   const budget = await t.call('GET', '/api/admin/budget', undefined, { token: owner });
-  assert.equal(budget.body.fortnox.bankBalance, 123456.5);
+  assert.equal(budget.body.fortnox.bankBalance, 150000.25);
 });
 
 test('token förnyas när den gått ut, nattjobbet kräver hemlig nyckel', async () => {
@@ -107,6 +111,6 @@ test('token förnyas när den gått ut, nattjobbet kräver hemlig nyckel', async
   const cron = await t.app(new Request('https://albertno485.com/api/cron/fortnox', { headers: { Authorization: 'Bearer cron-hemlis' } }));
   assert.equal(cron.status, 200);
   const off = await t.call('POST', '/api/admin/fortnox', { action: 'disconnect' }, { token: owner });
-  assert.equal(off.body.connected, false); assert.equal(off.body.bankBalance, 123456.5); // hämtad data finns kvar
+  assert.equal(off.body.connected, false); assert.equal(off.body.bankBalance, 150000.25); // hämtad data finns kvar
   assert.equal((await t.call('POST', '/api/admin/fortnox', { action: 'sync' }, { token: owner })).status, 409);
 });
