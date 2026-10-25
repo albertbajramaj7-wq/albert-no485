@@ -380,7 +380,9 @@
     if (!o) return;
     const net = (o.monthIn || 0) - (o.monthOut || 0);
     figs.append(
-      figure('Saldo', bkr(o.balanceSek), (o.accounts || []).filter(a => a.currency === 'SEK').length + ' konto i SEK' + (o.otherCurrencies ? ' · ' + o.otherCurrencies + ' i annan valuta' : '')),
+      (() => { const other = (o.accounts || []).filter(a => a.currency !== 'SEK' && a.balance !== null);
+        if (o.balanceSek === null && other.length) return figure('Saldo', other.map(a => (Math.round(a.balance * 100) / 100).toLocaleString('sv-SE') + ' ' + a.currency).join(' · '), 'Inget konto i SEK · visas i kontots valuta');
+        return figure('Saldo', bkr(o.balanceSek), (o.accounts || []).filter(a => a.currency === 'SEK').length + ' konto i SEK' + (o.otherCurrencies ? ' · ' + o.otherCurrencies + ' i annan valuta' : '')); })(),
       figure('Tillgängligt saldo', o.availableSek === null || o.availableSek === undefined ? 'Stöds inte' : bkr(o.availableSek), o.availableSek === null || o.availableSek === undefined ? 'Banken skickar bara bokfört saldo' : 'Enligt banken'),
       figure('Inkomster denna månad', bkr(o.monthIn), 'Samma dagar förra mån: ' + bkr(o.prevMonthInSameDays)),
       figure('Utgifter denna månad', bkr(o.monthOut), 'Samma dagar förra mån: ' + bkr(o.prevMonthOutSameDays)),
