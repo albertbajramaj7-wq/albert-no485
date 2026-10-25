@@ -90,8 +90,8 @@ async function api(fetcher, token, path) {
 }
 
 // Text-svar (SIE-export). Samma felhantering som api().
-async function apiText(fetcher, token, path) {
-  const response = await fetcher(API + path, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/octet-stream, text/plain, */*' } });
+async function apiText(fetcher, token, path, accept = 'application/octet-stream') {
+  const response = await fetcher(API + path, { headers: { Authorization: 'Bearer ' + token, Accept: accept } });
   if (!response.ok) {
     const step = path.split('?')[0].replace(/^\//, '').split('/')[0];
     const body = await response.json().catch(() => ({}));
@@ -171,7 +171,7 @@ export async function syncFortnox({ rpc, env, fetcher, now = () => new Date(), b
     throw new AppError(502, message);
   }
   // Banksaldot från SIE (bokfört i år) är mer rätt än kontolistans ingående balans.
-  if (overview?.source === 'SIE') bankBalance = overview.balances.bankAccount;
+  if (['SIE', 'verifikat'].includes(overview?.source)) bankBalance = overview.balances.bankAccount;
   if (overview) { try { await rpc('api_fortnox_overview', { overview }); } catch { errors.push('Översikten sparades inte (kör 0007_fortnox_ekonomi.sql i Supabase).'); } }
   const status = await rpc('api_fortnox_system', { action: 'save_sync', bankBalance, supplierInvoices: invoices.filter(i => /^\d{4}-\d{2}-\d{2}$/.test(i.date) && i.total !== null), by });
   if (errors.length) return await rpc('api_fortnox_system', { action: 'save_error', error: errors.join(' ') });
@@ -202,11 +202,39 @@ async function buildOverview({ fetcher, token, today, tryPaths, bankAccount }) {
   // Saldon: helst från SIE-exporten (räknar med allt bokfört i år). Annars kontolistans värden.
   let values = null, source = 'kontolistan';
   let sieError = null;
-  for (const path of [...(fy ? ['/sie/1?financialYear=' + fy.Id, '/sie/1?financialyear=' + fy.Id] : []), '/sie/1']) {
-    try { values = parseSie(await apiText(fetcher, token, path)); if (values.size) { source = 'SIE'; break; } sieError = 'SIE-filen var tom'; }
-    catch (e) { sieError = e instanceof AppError ? e.message : 'okänt fel'; if (e.fortnoxStatus === 401 || e.fortnoxStatus === 403) break; }
+  // Fortnox är noga med Accept-huvudet för filer – prova ett i taget.
+  sie: for (const path of [...(fy ? ['/sie/1?financialYear=' + fy.Id] : []), '/sie/1']) {
+    for (const accept of ['application/octet-stream', 'text/plain', '*/*']) {
+      try { values = parseSie(await apiText(fetcher, token, path, accept)); if (values.size) { source = 'SIE'; break sie; } sieError = 'SIE-filen var tom'; }
+      catch (e) { sieError = e instanceof AppError ? e.message : 'okänt fel'; if (e.fortnoxStatus === 401 || e.fortnoxStatus === 403) break sie; }
+    }
   }
-  if (source !== 'SIE') notes.push('Årets bokföring kunde inte läsas via SIE-export (' + sieError + '). Saldona kan vara ofullständiga.');
+  // Reserv: räkna fram årets rörelser från verifikaten (högst 100 st) och lägg på ingående balans.
+  if (source !== 'SIE' && fy) {
+    try {
+      // Ingående balans gäller bara balanskonton (1–2). Resultatkonton börjar på 0 varje år.
+      const sums = new Map([...carried].filter(([n]) => n < 3000));
+      const refs = [];
+      for (let page = 1; page <= 5 && refs.length < 101; page++) {
+        const r = await tryPaths(['/vouchers?financialyear=' + fy.Id + '&limit=100&page=' + page]);
+        for (const v of r?.Vouchers || []) refs.push(v);
+        if (page >= Number(r?.MetaInformation?.['@TotalPages'] || 1)) break;
+      }
+      if (refs.length <= 100) {
+        for (const ref of refs) {
+          let rows = Array.isArray(ref.VoucherRows) && ref.VoucherRows.length ? ref.VoucherRows : null;
+          if (!rows) rows = (await api(fetcher, token, '/vouchers/' + encodeURIComponent(ref.VoucherSeries) + '/' + encodeURIComponent(ref.VoucherNumber) + '?financialyear=' + fy.Id))?.Voucher?.VoucherRows || [];
+          for (const row of rows) {
+            if (row.Removed === true) continue;
+            const n = Number(row.Account); if (!Number.isInteger(n)) continue;
+            sums.set(n, Math.round(((sums.get(n) || 0) + (money(row.Debit) || 0) - (money(row.Credit) || 0)) * 100) / 100);
+          }
+        }
+        values = sums; source = 'verifikat';
+      } else sieError += '; för många verifikat för reservvägen';
+    } catch (e) { sieError += '; verifikat: ' + (e instanceof AppError ? e.message : 'okänt fel'); }
+  }
+  if (!['SIE', 'verifikat'].includes(source)) notes.push('Årets bokföring kunde inte läsas via SIE-export (' + sieError + '). Saldona kan vara ofullständiga.');
   for (const [n, v] of (values && values.size ? values : carried)) if (v) accounts.push({ n, name: names.get(n) || 'Konto ' + n, v });
   const neg = x => Math.round(-x * 100) / 100;
   const revenue = neg(sumAcc(accounts, 3000, 3999));

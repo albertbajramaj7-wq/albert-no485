@@ -114,3 +114,25 @@ test('token förnyas när den gått ut, nattjobbet kräver hemlig nyckel', async
   assert.equal(off.body.connected, false); assert.equal(off.body.bankBalance, 150000.25); // hämtad data finns kvar
   assert.equal((await t.call('POST', '/api/admin/fortnox', { action: 'sync' }, { token: owner })).status, 409);
 });
+
+test('om SIE-exporten nekas räknas saldon fram från verifikaten', async () => {
+  const fake = async (url, init = {}) => {
+    if (url.includes('/sie/')) return new Response(JSON.stringify({ ErrorInformation: { message: 'Invalid response type.' } }), { status: 400 });
+    if (url.includes('/vouchers?')) return new Response(JSON.stringify({ MetaInformation: { '@TotalPages': 1 }, Vouchers: [{ VoucherSeries: 'A', VoucherNumber: 1 }] }), { status: 200 });
+    if (url.includes('/vouchers/A/1')) return new Response(JSON.stringify({ Voucher: { VoucherRows: [
+      { Account: 1930, Debit: 558.10, Credit: 0 }, { Account: 3001, Debit: 0, Credit: 446.48 }, { Account: 2611, Debit: 0, Credit: 111.62 }] } }), { status: 200 });
+    return fakeFortnox(url, init);
+  };
+  const t2 = setup({ env: { FORTNOX_CLIENT_ID: 'klient', FORTNOX_CLIENT_SECRET: 'hemlis', SUPABASE_SERVICE_ROLE_KEY: 'test-nyckel-som-ar-lang-nog' }, fetcher: fake });
+  try {
+    t2.auth.addUser('albert@albertno485.com', 'hemligt-losen-1', 'Albert');
+    const tok = t2.auth.tokenFor('albert@albertno485.com');
+    await t2.call('GET', '/api/admin/day', undefined, { token: tok });
+    const start = await t2.call('POST', '/api/admin/fortnox', { action: 'connect' }, { token: tok });
+    const state = new URL(start.body.url).searchParams.get('state');
+    await t2.app(new Request('https://albertno485.com/api/fortnox/callback?code=kod-123&state=' + state));
+    const s = await t2.call('GET', '/api/admin/fortnox', undefined, { token: tok });
+    assert.equal(s.body.overview.source, 'verifikat');
+    assert.equal(s.body.overview.result.revenue, 446.48);
+  } finally { t2.close(); }
+});
