@@ -1083,7 +1083,16 @@
 
   // ---------- Ekonomi (Fortnox) ----------
   let economy;
-  async function loadEconomy() { const r = await adminCall('fortnox'); if (r) { economy = r; renderEconomy(); } }
+  // Hämtar automatiskt från Fortnox om senaste hämtningen är äldre än 10 minuter.
+  async function loadEconomy(auto) {
+    const r = await adminCall('fortnox'); if (!r) return; economy = r; renderEconomy();
+    const at = r.overviewAt || r.syncedAt;
+    if (r.connected && (!at || Date.now() - new Date(at).getTime() > 10 * 60000) && !busy) {
+      const s = await adminCall('fortnox', { action: 'sync' }, ''); if (s && view === 'economy') { economy = s; renderEconomy(); }
+    }
+  }
+  // Medan Ekonomi eller Ekonomi & Bank är öppen uppdateras siffrorna var 5:e minut.
+  setInterval(() => { if (document.hidden || busy || !data) return; if (view === 'economy') loadEconomy(true); else if (view === 'bank' && bank) loadBank(); }, 5 * 60000);
   function renderEconomy() {
     const f = economy, o = f?.overview, when = t => t ? new Date(t).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }) : '';
     $('eco-sync').hidden = !f?.connected;

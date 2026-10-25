@@ -169,8 +169,15 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
       if (path === '/api/cron/fortnox' && method === 'GET') {
         const secret = String(env.CRON_SECRET || '');
         if (!secret || request.headers.get('authorization') !== 'Bearer ' + secret) throw new AppError(401, 'Ej behörig.');
-        const status = await syncFortnox({ rpc, env, fetcher, now, by: 'Automatiskt (natt)' });
-        return json({ ok: true, syncedAt: status.syncedAt });
+        // Körs var 15:e minut (vercel.json). Hoppar över det som inte är kopplat.
+        const result = {};
+        if (fortnoxConfig(env).configured) {
+          try { result.fortnox = (await syncFortnox({ rpc, env, fetcher, now, by: 'Automatiskt' })).syncedAt; } catch (error) { result.fortnox = error.status === 409 ? 'ej kopplat' : 'fel'; }
+        }
+        if (bankConfig(env).configured) {
+          try { result.bank = (await syncBank({ rpc, env, fetcher, transport: bankTransport, now, by: 'Automatiskt' })).added; } catch { result.bank = 'fel'; }
+        }
+        return json({ ok: true, ...result });
       }
 
       if (!path.startsWith('/api/admin/') && path !== '/api/auth/password') throw new AppError(404, 'Sidan finns inte.');
