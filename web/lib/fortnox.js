@@ -91,10 +91,12 @@ async function api(fetcher, token, path) {
 
 // Text-svar (SIE-export). Samma felhantering som api().
 async function apiText(fetcher, token, path) {
-  const response = await fetcher(API + path, { headers: { Authorization: 'Bearer ' + token, Accept: 'text/plain, */*' } });
+  const response = await fetcher(API + path, { headers: { Authorization: 'Bearer ' + token, Accept: 'application/octet-stream, text/plain, */*' } });
   if (!response.ok) {
     const step = path.split('?')[0].replace(/^\//, '').split('/')[0];
-    throw Object.assign(new AppError(502, 'Fortnox svarade ' + response.status + ' på ' + step + '.'), { fortnoxStatus: response.status });
+    const body = await response.json().catch(() => ({}));
+    const msg = body?.ErrorInformation?.message || body?.ErrorInformation?.Message || '';
+    throw Object.assign(new AppError(502, 'Fortnox svarade ' + response.status + ' på ' + step + (msg ? ': ' + String(msg).replace(/\.+$/, '').slice(0, 120) : '') + '.'), { fortnoxStatus: response.status });
   }
   return response.text();
 }
@@ -199,8 +201,12 @@ async function buildOverview({ fetcher, token, today, tryPaths, bankAccount }) {
   }
   // Saldon: helst från SIE-exporten (räknar med allt bokfört i år). Annars kontolistans värden.
   let values = null, source = 'kontolistan';
-  try { values = parseSie(await apiText(fetcher, token, '/sie/1' + (fy ? '?financialyear=' + fy.Id : ''))); source = 'SIE'; }
-  catch (e) { notes.push('Årets bokföring kunde inte läsas via SIE-export, saldona kan vara ofullständiga.'); }
+  let sieError = null;
+  for (const path of [...(fy ? ['/sie/1?financialYear=' + fy.Id, '/sie/1?financialyear=' + fy.Id] : []), '/sie/1']) {
+    try { values = parseSie(await apiText(fetcher, token, path)); if (values.size) { source = 'SIE'; break; } sieError = 'SIE-filen var tom'; }
+    catch (e) { sieError = e instanceof AppError ? e.message : 'okänt fel'; if (e.fortnoxStatus === 401 || e.fortnoxStatus === 403) break; }
+  }
+  if (source !== 'SIE') notes.push('Årets bokföring kunde inte läsas via SIE-export (' + sieError + '). Saldona kan vara ofullständiga.');
   for (const [n, v] of (values && values.size ? values : carried)) if (v) accounts.push({ n, name: names.get(n) || 'Konto ' + n, v });
   const neg = x => Math.round(-x * 100) / 100;
   const revenue = neg(sumAcc(accounts, 3000, 3999));
