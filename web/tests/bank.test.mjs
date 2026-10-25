@@ -185,3 +185,17 @@ test('prognos och Fortnox-matchning skiljer faktiskt från uppskattat', () => {
   assert.equal(m.items[1].status, 'obetald');
   assert.equal(m.deviations, 1);
 });
+
+test('granskning: felaktiga filter ger 400, synk bara via POST, behörighet försvinner vid rollbyte', async () => {
+  for (const qs of ['from=abc', 'limit=1e3', 'limit=99999999999', 'min=abc', 'direction=all', 'offset=-1'])
+    assert.equal((await t.call('GET', '/api/admin/bank?view=transactions&' + qs, undefined, { token: owner })).status, 400, qs);
+  const pct = await t.call('GET', '/api/admin/bank?view=transactions&from=2026-01-01&q=%25', undefined, { token: owner });
+  assert.equal(pct.status, 200); // % söks inte som jokertecken
+  assert.equal((await t.call('GET', '/api/admin/bank?view=sync', undefined, { token: owner })).status, 400);
+  assert.equal((await t.call('POST', '/api/admin/bank', { action: 'access', userId: adminId, allow: 'kanske' }, { token: owner })).status, 400);
+  // Sara har behörighet sedan tidigare test. Byt till personal och tillbaka → behörigheten är borta.
+  assert.equal((await t.call('GET', '/api/admin/bank', undefined, { token: admin })).status, 200);
+  sql(t.db, `update staff set role = 'staff' where user_id = '${adminId}'`);
+  sql(t.db, `update staff set role = 'admin' where user_id = '${adminId}'`);
+  assert.equal((await t.call('GET', '/api/admin/bank', undefined, { token: admin })).status, 403);
+});

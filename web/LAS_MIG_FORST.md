@@ -124,6 +124,8 @@ eventuellt `DANSKE_CLIENT_KEY_PASSPHRASE`. Certifikat och nyckel kan klistras in
 Banken hämtas automatiskt varje natt och med knappen "Hämta från banken". Varje hämtning och läsning loggas
 (utan nycklar) och syns under Behörighet → Åtkomstlogg.
 
+Obs: när du ställer en bankfråga till AI-assistenten skickas sammanställd bankdata (belopp, motparter, kategorier) till Anthropic för att besvara frågan. Assistenten kan bara läsa. Bankbehörigheten tas automatiskt bort om en person byter roll eller inaktiveras.
+
 ## För utvecklare
 - Testerna kräver en lokal Postgres (`psql` i PATH): `PGHOST=... PGPORT=... PGUSER=... npm test`
 - Lokal förhandsvisning med låtsas-inloggning: `node tests/dev-server.mjs`, öppna http://localhost:8787

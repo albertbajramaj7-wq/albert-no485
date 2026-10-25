@@ -101,7 +101,8 @@ function mtlsTransport(cfg) {
 }
 
 function makeClient(cfg, { fetcher, transport }) {
-  const send = transport || (cfg.needsCert ? mtlsTransport(cfg) : fetcher);
+  // Mock: vanlig fetch men utan omdirigeringar (annan värd) och med tidsgräns.
+  const send = transport || (cfg.needsCert ? mtlsTransport(cfg) : (url, init) => fetcher(url, { ...init, redirect: 'error', signal: AbortSignal.timeout(20000) }));
   let token = null;
   async function readOnlyRequest(method, urlText, init = {}) {
     assertReadOnly(cfg, method, urlText);
@@ -163,7 +164,7 @@ export function categorize(t) {
 export function normalizeTransaction(raw, accountId) {
   const amount = num(raw?.transactionAmount?.amount ?? raw?.amount);
   const bookingDate = date(raw?.bookingDate) || date(raw?.valueDate);
-  if (amount === null || !bookingDate) return null;
+  if (amount === null || !bookingDate || Math.abs(amount) >= 1e13) return null;
   const rem = raw?.remittanceInformationUnstructured;
   const code = raw?.bankTransactionCode;
   const t = {
@@ -172,7 +173,7 @@ export function normalizeTransaction(raw, accountId) {
     counterparty: str(raw?.creditor?.name || raw?.debtor?.name || raw?.creditorName || raw?.debtorName || raw?.counterpartyName),
     reference: str(Array.isArray(rem) ? rem.join(' ') : rem || raw?.remittanceInformationStructured || raw?.reference, 300),
     type: str(typeof code === 'string' ? code : code ? [code.domain, code.family, code.subFamily, code.code].filter(Boolean).join(' / ') : '', 80) || (amount < 0 ? 'Utbetalning' : 'Insättning'),
-    transactionId: str(raw?.transactionId, 150),
+    transactionId: raw?.transactionId === null || raw?.transactionId === undefined ? '' : String(raw.transactionId).slice(0, 500),
   };
   t.category = categorize(t);
   return t;
@@ -182,21 +183,22 @@ export function normalizeTransaction(raw, accountId) {
 function withKeys(list) {
   const seen = new Map();
   return list.map(t => {
-    if (t.transactionId) return { ...t, key: 'id:' + t.account + ':' + t.transactionId };
+    if (t.transactionId) return { ...t, key: 'id:' + createHash('sha256').update(t.account + '\u0000' + t.transactionId).digest('hex') };
     const base = createHash('sha256').update([t.account, t.date, t.amount, t.currency, t.counterparty, t.reference].join('|')).digest('hex').slice(0, 40);
     const n = (seen.get(base) || 0) + 1; seen.set(base, n);
     return { ...t, key: 'h:' + base + ':' + n };
   });
 }
 
+const safe = n => (n !== null && Math.abs(n) < 1e13 ? n : null);
 function pickBalance(body) {
   const list = Array.isArray(body?.balances) ? body.balances : [];
   const find = types => list.find(b => types.includes(String(b?.balanceType || '')));
   const booked = find(['interimBooked', 'closingBooked', 'expected']) || list[0];
   const avail = find(['interimAvailable', 'closingAvailable', 'available', 'forwardAvailable']);
   return {
-    balance: num(booked?.balanceAmount?.amount), available: avail ? num(avail.balanceAmount?.amount) : null,
-    balanceAt: booked?.referenceDate ? new Date(booked.referenceDate).toISOString() : null,
+    balance: safe(num(booked?.balanceAmount?.amount)), available: avail ? safe(num(avail.balanceAmount?.amount)) : null,
+    balanceAt: (() => { const d = booked?.referenceDate ? new Date(booked.referenceDate) : null; return d && !isNaN(d) ? d.toISOString() : null; })(),
   };
 }
 

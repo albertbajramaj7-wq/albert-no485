@@ -13,6 +13,18 @@
 
 alter table staff add column if not exists bank_access boolean not null default false;
 
+-- Bankbehörigheten försvinner automatiskt om personen byter roll eller inaktiveras.
+-- Ägaren måste då ge den igen.
+create or replace function _bank_access_reset() returns trigger
+language plpgsql as $$
+begin
+  if new.role is distinct from old.role or not new.active then new.bank_access := false; end if;
+  return new;
+end $$;
+drop trigger if exists staff_bank_access_reset on staff;
+create trigger staff_bank_access_reset before update of role, active on staff
+  for each row execute function _bank_access_reset();
+
 create table if not exists bank_accounts (
   env          text not null check (env in ('mock', 'sandbox', 'live')),
   provider     text not null,
@@ -80,7 +92,7 @@ create or replace function _bank_actor(p jsonb) returns staff
 language plpgsql as $$
 declare v staff := _actor(p, 'admin');
 begin
-  if v.role <> 'owner' and not v.bank_access then
+  if v.role <> 'owner' and not (v.role = 'admin' and v.bank_access) then
     perform _fail(403, 'Ekonomi & Bank kräver särskild behörighet från ägaren.');
   end if;
   return v;
@@ -158,10 +170,10 @@ begin
     end if;
     if p ? 'userId' and p ->> 'userId' is not null then
       v_user := _uuid(p -> 'userId', 'Välj en giltig person.');
-      update staff set bank_access = coalesce((p ->> 'allow')::boolean, false) where user_id = v_user and role = 'admin';
+      update staff set bank_access = _bool(p -> 'allow', 'Välj ja eller nej.') where user_id = v_user and role = 'admin' and active;
       get diagnostics v_rows = row_count;
       if v_rows = 0 then perform _fail(400, 'Bara administratörer kan få behörighet till Ekonomi & Bank.'); end if;
-      perform _bank_log(a, 'access_changed', 'live', jsonb_build_object('userId', v_user, 'allow', p -> 'allow'));
+      perform _bank_log(a, 'access_changed', 'alla', jsonb_build_object('userId', v_user, 'allow', p -> 'allow'));
     end if;
     return jsonb_build_object('admins', coalesce((select jsonb_agg(jsonb_build_object('userId', user_id, 'name', name, 'email', email, 'bankAccess', bank_access) order by name)
       from staff where role = 'admin' and active), '[]'));
@@ -220,7 +232,7 @@ begin
 
   elsif v_action = 'log' then
     return jsonb_build_object('items', coalesce((select jsonb_agg(jsonb_build_object('at', at, 'actor', actor, 'action', action, 'env', env) order by at desc)
-      from (select * from bank_access_log order by at desc limit 50) l), '[]'));
+      from (select * from bank_access_log where env in (v_env, 'alla') order by at desc limit 50) l), '[]'));
   end if;
   perform _fail(400, 'Okänd åtgärd.');
 end $$;

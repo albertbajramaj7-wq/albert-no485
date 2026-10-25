@@ -21,7 +21,7 @@ async function diagnose() {
     aiKey: !env.ANTHROPIC_API_KEY ? 'saknas' : env.ANTHROPIC_API_KEY.trim().startsWith('sk-ant-') ? 'inlagd' : 'inlagd men börjar inte med sk-ant-',
     cronSecret: env.CRON_SECRET ? (env.CRON_SECRET.length >= 16 ? 'inlagd' : 'för kort') : 'saknas',
     fortnoxKeys: env.FORTNOX_CLIENT_ID && env.FORTNOX_CLIENT_SECRET ? 'inlagda' : 'saknas',
-    bank: (() => { const b = bankStatus(env); return b.mode + (b.configured ? ' (redo)' : b.mode === 'off' ? '' : ' (saknar: ' + b.missing.join(', ') + ')'); })(),
+    bank: bankStatus(env).configured ? 'påslagen' : 'avstängd',
     vercelEnv: env.VERCEL_ENV || 'okänd',
   };
   try { await rpc('api_menu', {}); result.database = 'ok'; } catch (e) { result.database = e.message; }
