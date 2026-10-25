@@ -108,10 +108,14 @@ function makeClient(cfg, { fetcher, transport }) {
     assertReadOnly(cfg, method, urlText);
     for (let attempt = 0; attempt < 3; attempt++) {
       const res = await send(urlText, { ...init, method });
-      if ((res.status === 429 || res.status >= 500) && attempt < 2) { await new Promise(r => setTimeout(r, 400 * (attempt + 1))); continue; }
+      // Testtjänsten (mock) svarar med slumpmässiga fel med flit – försök igen några gånger.
+      const retry = res.status === 429 || res.status >= 500 || (cfg.mode === 'mock' && ![401, 403, 404].includes(res.status) && !res.ok);
+      if (retry && attempt < 2) { await new Promise(r => setTimeout(r, 400 * (attempt + 1))); continue; }
       const body = await res.json().catch(() => ({}));
       if (!res.ok) {
-        const err = new AppError(502, 'Banken svarade med fel ' + res.status + (body?.error_description || body?.message ? ': ' + String(body.error_description || body.message).slice(0, 120) : '') + '.');
+        const step = method === 'POST' ? 'inloggning' : /\/balances$/.test(new URL(urlText).pathname) ? 'saldo' : /\/transactions$/.test(new URL(urlText).pathname) ? 'transaktioner' : 'kontolista';
+        const why = body?.error_description || body?.message || body?.error || body?.title || body?.detail;
+        const err = new AppError(502, 'Banken svarade med fel ' + res.status + ' (' + step + ')' + (why ? ': ' + String(why).slice(0, 120) : '') + '.');
         err.bankStatus = res.status; throw err;
       }
       return body;
