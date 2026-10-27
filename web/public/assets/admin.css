@@ -717,3 +717,6 @@
 .admin-app .key-figures strong,.admin-app .key-figures .kf-main strong,.admin-app .key-figures>div:first-child strong{white-space:normal;overflow-wrap:anywhere;font-size:clamp(26px,2.4vw,44px)}
 .admin-app .eco-row span,.admin-app .eco-row strong,.admin-app .bank-line strong{font-family:var(--at-sans);font-weight:500}
 @media (max-width:480px){.admin-app .live-clock strong{font-size:40px}.admin-app .key-figures strong,.admin-app .key-figures .kf-main strong,.admin-app .key-figures>div:first-child strong{font-size:30px}}
+
+/* Visa tecken som text, aldrig som färgade emojis (iPhone) */
+.admin-app,.admin-app *{font-variant-emoji:text}

@@ -392,7 +392,7 @@
     const cats = $('bank-categories'); const cl = (o.categories || []).filter(c => c.out > 0);
     if (!cl.length) cats.append(el('p', 'Inga utgifter denna månad.', 'muted'));
     cl.forEach(c => { const d = el('div', undefined, 'eco-row'), l = el('div'); const diff = c.out - (c.prevOut || 0);
-      l.append(el('strong', c.category), el('small', c.prevOut ? (diff > 0 ? '▲ ' : diff < 0 ? '▼ ' : '') + bkr(Math.abs(diff)) + ' mot förra mån' : 'Inget samma period förra mån'));
+      l.append(el('strong', c.category), el('small', c.prevOut ? (diff > 0 ? bkr(Math.abs(diff)) + ' mer än förra mån' : diff < 0 ? bkr(Math.abs(diff)) + ' mindre än förra mån' : 'Samma som förra mån') : 'Inget samma period förra mån'));
       if (diff > 0 && c.prevOut) d.classList.add('overdue'); d.append(l, el('span', bkr(c.out))); cats.append(d); });
     const top = $('bank-top'); if (!(o.topCosts || []).length) top.append(el('p', 'Inga utgifter denna månad.', 'muted'));
     (o.topCosts || []).forEach(c => { const d = el('div', undefined, 'eco-row'), l = el('div'); l.append(el('strong', c.counterparty), el('small', c.count + (c.count === 1 ? ' betalning' : ' betalningar'))); d.append(l, el('span', bkr(c.amount))); top.append(d); });
@@ -462,6 +462,8 @@
   $('bank-filter').addEventListener('submit', event => { event.preventDefault(); loadBankTx(true); });
   $('bank-more').addEventListener('click', () => loadBankTx(false));
   document.querySelectorAll('[data-bank-q]').forEach(b => b.addEventListener('click', () => { switchView('ai'); askAi(b.dataset.bankQ); }));
+
+  $('bud-print').addEventListener('click', printBudget);
 
   // ---------- Klocka ----------
   const clockFmt = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -656,10 +658,10 @@
   function orderText(o) {
     return ['Hej' + (o.supplierContact ? ' ' + o.supplierContact : '') + '!', '', 'Vi vill beställa följande till Albert NO.485:', '', ...o.lines.map(l => '- ' + num(l.qty) + ' ' + l.unit + ' ' + l.name), '', o.note || '', 'Leverans till Pilgatan 3, Varberg.', 'Beställningsnummer: ' + o.number, '', 'Tack!', 'Albert NO.485', '0340-827 75'].join('\n');
   }
-  function printDoc(title, body) {
+  function printDoc(title, body, css = '') {
     const w = window.open('', '_blank');
     if (!w) { note('Utskriften blockerades. Tillåt popup-fönster för sidan och försök igen.'); return; }
-    w.document.write('<!doctype html><html lang="sv"><head><meta charset="utf-8"><title>' + title + '</title><style>body{font:14px/1.5 system-ui,Arial,sans-serif;color:#2a1f1b;margin:32px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:22px 0 8px}p{margin:0 0 12px;color:#6b605a}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #ddd}th{font-size:12px;color:#6b605a}td.n,th.n{text-align:right}td:first-child,th:first-child{width:28px}.box{display:inline-block;width:14px;height:14px;border:1px solid #2a1f1b;vertical-align:middle}</style></head><body>' + body + '</body></html>');
+    w.document.write('<!doctype html><html lang="sv"><head><meta charset="utf-8"><title>' + title + '</title><style>body{font:14px/1.5 system-ui,Arial,sans-serif;color:#2a1f1b;margin:32px}h1{font-size:22px;margin:0 0 4px}h2{font-size:16px;margin:22px 0 8px}p{margin:0 0 12px;color:#6b605a}table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:7px 8px;border-bottom:1px solid #ddd}th{font-size:12px;color:#6b605a}td.n,th.n{text-align:right}td:first-child,th:first-child{width:28px}.box{display:inline-block;width:14px;height:14px;border:1px solid #2a1f1b;vertical-align:middle}' + css + '</style></head><body>' + body + '</body></html>');
     w.document.close(); w.focus(); setTimeout(() => w.print(), 300);
   }
   const esc = v => String(v ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
@@ -870,7 +872,44 @@
     }
     table.append(body);
     $('bud-fill-fortnox').hidden = !Object.keys(sug).length;
+    $('bud-print').disabled = false;
     renderBudgetYear(); renderBudgetSettings(); renderFortnox();
+  }
+
+  // Infoblad (PDF): vad som får spenderas på varje post den valda veckan.
+  function printBudget() {
+    const w = budgetPreview(), title = 'Veckobudget ' + weekLabel(budWeek);
+    const css = 'body{font:13px/1.5 "Helvetica Neue",Arial,sans-serif;color:#111;margin:40px 44px;max-width:760px}'
+      + 'h1{font-size:30px;font-weight:300;letter-spacing:-.02em;margin:0 0 2px}h2{font-size:15px;font-weight:600;margin:26px 0 8px}'
+      + '.meta{color:#6e6e6e;margin:0 0 22px}.sum{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin:0 0 6px}'
+      + '.sum div{background:#f4f4f4;padding:12px 14px}.sum div:first-child{background:#111;color:#fff}.sum span{display:block;font-size:11px;color:#6e6e6e}'
+      + '.sum div:first-child span{color:#bbb}.sum strong{display:block;font-size:20px;font-weight:300;letter-spacing:-.02em;margin-top:4px}'
+      + 'table{width:100%;border-collapse:collapse}th,td{padding:8px 8px;border-bottom:1px solid #e3e3e3;text-align:left}th{font-weight:500;color:#6e6e6e;font-size:11px;border-bottom:1px solid #111}'
+      + 'td.n,th.n{text-align:right;white-space:nowrap}td:first-child,th:first-child{width:auto}tr.big td{font-size:15px;font-weight:600}.neg{color:#a1342a}.foot{color:#6e6e6e;font-size:11px;margin-top:22px}'
+      + '@page{margin:14mm}@media print{body{margin:0}}';
+    let body = '<h1>' + esc(title) + '</h1><p class="meta">Albert NO.485 · utskriven ' + esc(readable(today())) + (w?.updatedBy ? ' · sparad av ' + esc(w.updatedBy) : '') + '</p>';
+    if (!w?.computed) {
+      body += '<p>Veckans omsättning är inte ifylld ännu. Fyll i den under Veckobudget så räknas det här bladet fram.</p>';
+      printDoc(title, body, css); return;
+    }
+    const k = n => esc(krd(n));
+    body += '<div class="sum"><div><span>Att spendera totalt</span><strong>' + k(w.posts.reduce((t, p) => t + Math.max(0, p.available || 0), 0)) + '</strong></div>'
+      + '<div><span>Omsättning ex moms</span><strong>' + k(w.revenueEx) + '</strong></div>'
+      + '<div><span>Kvar efter avsättningar</span><strong' + (w.left < 0 ? ' class="neg"' : '') + '>' + k(w.left) + '</strong></div>'
+      + '<div><span>Fritt saldo</span><strong>' + k(w.free) + '</strong></div></div>';
+    body += '<h2>Det här kan du spendera den här veckan</h2><table><tr><th>Post</th><th class="n">Att använda</th><th class="n">Använt</th><th class="n">Kvar</th></tr>';
+    for (const p of w.posts) {
+      const used = w.actuals?.[p.key];
+      const left = (p.available ?? 0) - (used || 0);
+      body += '<tr><td>' + esc(p.name) + (p.basis ? '<br><span style="color:#6e6e6e;font-size:11px">' + esc(p.basis) + '</span>' : '') + '</td><td class="n">' + k(p.available) + '</td><td class="n">' + (used === null || used === undefined ? '–' : k(used)) + '</td><td class="n' + (left < 0 ? ' neg' : '') + '">' + k(left) + '</td></tr>';
+    }
+    body += '</table><h2>Det här ska ligga kvar på kontot</h2><table><tr><th>Avsättning</th><th class="n">Belopp</th></tr>'
+      + '<tr><td>Momsreserv (betalas till Skatteverket)</td><td class="n">' + k(w.vatReserve) + '</td></tr>'
+      + '<tr><td>Buffert</td><td class="n">' + k(w.buffer) + '</td></tr>'
+      + '<tr class="big"><td>Summa</td><td class="n">' + k((w.vatReserve || 0) + (w.buffer || 0)) + '</td></tr></table>'
+      + '<h2>Saldo</h2><table><tr><td>Ingående saldo</td><td class="n">' + k(w.balanceIn) + '</td></tr><tr><td>Veckans plus/minus</td><td class="n' + (w.plusMinus < 0 ? ' neg' : '') + '">' + k(w.plusMinus) + '</td></tr><tr class="big"><td>Saldo efter veckan</td><td class="n">' + k(w.balanceOut) + '</td></tr></table>'
+      + '<p class="foot">Att använda = veckans budget för posten plus det som blev över förra veckan. Kvar förs vidare till nästa vecka. Siffrorna kommer från veckobudgeten i admin' + (w.note ? '. Anteckning: ' + esc(w.note) : '') + '.</p>';
+    printDoc(title, body, css);
   }
   const lastBalance = () => { const before = budget.weeks.filter(x => x.weekStart < budWeek); return before.length ? before[before.length - 1].balanceOut : budget.settings.startBalance; };
   function renderBudgetYear() {
@@ -984,7 +1023,7 @@
     const when = t => t ? new Date(t).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }) : '';
     if (!f?.configured) {
       $('fx-state').textContent = 'Inte kopplat';
-      body.append(el('p', 'Fortnox-nycklarna finns inte i Vercel ännu. Lägg in FORTNOX_CLIENT_ID och FORTNOX_CLIENT_SECRET under Settings → Environment Variables, gör en ny deploy och kom tillbaka hit.', 'muted'));
+      body.append(el('p', 'Fortnox-nycklarna finns inte i Vercel ännu. Lägg in FORTNOX_CLIENT_ID och FORTNOX_CLIENT_SECRET under Settings, Environment Variables, gör en ny deploy och kom tillbaka hit.', 'muted'));
       return;
     }
     if (!f.connected) {
@@ -1002,7 +1041,7 @@
       button('Koppla från', 'text-button', async () => { if (!confirm('Koppla från Fortnox? Redan hämtade siffror finns kvar.')) return; const r = await adminCall('fortnox', { action: 'disconnect' }, 'Fortnox är frånkopplat.'); if (r) { budget.fortnox = r; renderBudget(); } }));
     body.append(actions);
     const sec = el('div', undefined, 'budget-group');
-    sec.append(el('h3', 'Leverantörer → budgetpost'), el('p', 'Välj vilken post varje leverantörs fakturor hör till. Då föreslås beloppen automatiskt under Faktiskt använt. Senaste 120 dagarna.', 'muted'));
+    sec.append(el('h3', 'Leverantörer och budgetposter'), el('p', 'Välj vilken post varje leverantörs fakturor hör till. Då föreslås beloppen automatiskt under Faktiskt använt. Senaste 120 dagarna.', 'muted'));
     const g = el('div', undefined, 'config-grid'), bl = el('div'), lab = el('label', 'Bankkonto i bokföringen'), acc = el('input'); lab.htmlFor = 'fx-bank'; acc.id = 'fx-bank'; acc.inputMode = 'numeric'; acc.value = f.bankAccount; bl.append(lab, acc); g.append(bl); sec.append(g);
     if (!f.suppliers.length) sec.append(el('p', 'Inga leverantörsfakturor hittades.', 'muted'));
     else {
@@ -1098,7 +1137,7 @@
     $('eco-sync').hidden = !f?.connected;
     const figs = $('eco-figures'); figs.replaceChildren();
     ['eco-result', 'eco-payables', 'eco-costs', 'eco-receivables'].forEach(id => $(id).replaceChildren());
-    if (!f?.connected) { $('eco-sub').textContent = 'Fortnox är inte kopplat. Koppla det under Veckobudget → Fortnox.'; $('eco-warn').hidden = true; $('eco-year').textContent = ''; $('eco-notes').textContent = ''; return; }
+    if (!f?.connected) { $('eco-sub').textContent = 'Fortnox är inte kopplat. Koppla det under Veckobudget, avsnittet Fortnox.'; $('eco-warn').hidden = true; $('eco-year').textContent = ''; $('eco-notes').textContent = ''; return; }
     $('eco-sub').textContent = 'Från Fortnox' + (f.companyName ? ' · ' + f.companyName : '') + (o?.asOf ? ' · bokfört t.o.m. ' + o.asOf : '') + (f.overviewAt || f.syncedAt ? ' · hämtat ' + when(f.overviewAt || f.syncedAt) : '');
     $('eco-warn').hidden = !f.lastError; $('eco-warn').textContent = f.lastError ? 'Senaste hämtningen: ' + f.lastError : '';
     if (!o) { $('eco-year').textContent = ''; $('eco-notes').textContent = 'Ingen översikt ännu. Tryck "Hämta nu". Kör även 0007_fortnox_ekonomi.sql i Supabase om du inte gjort det.'; return; }
