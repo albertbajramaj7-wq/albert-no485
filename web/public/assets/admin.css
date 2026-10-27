@@ -442,3 +442,162 @@
 .bank-table select{font-size:12px;padding:6px 8px;min-height:36px}
 @media(max-width:1050px){.bank-filter{grid-template-columns:repeat(4,minmax(0,1fr))}.bank-filter .bank-q{grid-column:1/-1}}
 @media(max-width:700px){.admin-app .eco-grid{grid-template-columns:1fr}.bank-filter{grid-template-columns:1fr 1fr}.bank-filter button{grid-column:1/-1}}
+
+/* =====================================================================
+   Version 3 – "Ateljé". Stilla och exakt: stengrå yta, espresso-panel,
+   Didot/Bodoni för rubriker och siffror, tunna linjer, inga piller,
+   inga skuggor på varje kort. Mässing bara för det som är valt.
+   ===================================================================== */
+.admin-app{
+  --at-stone:#e8e6e3; --at-panel:#f7f6f4; --at-ink:#241a16; --at-espresso:#2b1f1a; --at-brown:#6b4e3d;
+  --at-grey:#7f7973; --at-line:#d6d2cd; --at-line-soft:#e4e1dd; --at-brass:#b49a6a; --at-neg:#8a3a2c;
+  --at-display:Didot,"Bodoni 72","Bodoni MT","Bodoni Moda","Libre Bodoni","Iowan Old Style",Georgia,serif;
+  --at-sans:-apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI Variable Text","Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  background:var(--at-stone);color:var(--at-ink);font:15px/1.55 var(--at-sans);letter-spacing:0;
+}
+/* Toppfält: lugnt, utan frostat glas */
+.admin-app .admin-topbar{background:var(--at-stone);-webkit-backdrop-filter:none;backdrop-filter:none;border-bottom:1px solid var(--at-line);box-shadow:none}
+.admin-app .admin-topbar-inner{min-height:64px}
+.admin-app .admin-brand img{filter:none}
+.admin-app .menu-toggle{border-radius:6px;background:var(--at-espresso);box-shadow:none;padding:9px 14px;font-weight:500;letter-spacing:0}
+.admin-app .account-links span,.admin-app #account-name{color:var(--at-grey);letter-spacing:0}
+.admin-app .topbar-button{font-weight:500}
+
+/* Sidrubrik: en stor Didot-rubrik, datum i vanlig text */
+.admin-app .workspace-heading{border-bottom:1px solid var(--at-line);padding-bottom:20px;margin-bottom:26px}
+.admin-app .workspace-heading h1{font:400 46px/1.02 var(--at-display);letter-spacing:-.01em;color:var(--at-ink)}
+.admin-app .workspace-heading p{text-transform:none;letter-spacing:0;font-size:14px;color:var(--at-grey);margin-top:8px}
+.admin-app .workspace-heading p::first-letter{text-transform:uppercase}
+
+/* Ytor: platta paneler med tunn kant, ingen skugga */
+.admin-app .admin-card,.admin-app .day-settings form,.admin-app .booking-row,.admin-app .stock-row,.admin-app .po-card,.admin-app .login-panel form{
+  background:var(--at-panel);border:1px solid var(--at-line);border-radius:8px;box-shadow:none}
+.admin-app .admin-card{padding:24px 26px}
+.admin-app .admin-card h2,.admin-app .section-heading h2{font:400 26px/1.15 var(--at-display);letter-spacing:0;color:var(--at-ink)}
+.admin-app .admin-card h3{font:600 14px/1.4 var(--at-sans);letter-spacing:0;text-transform:none;color:var(--at-ink)}
+.admin-app .muted,.admin-app .field-help{color:var(--at-grey)}
+.admin-app .heading-count{font:400 14px/1 var(--at-sans);letter-spacing:0;text-transform:none;color:var(--at-grey)}
+
+/* Nyckeltal: en sammanhängande rad med linjer emellan – inte åtta kort */
+.admin-app .day-summary,.admin-app .key-figures{gap:0;background:var(--at-panel);border:1px solid var(--at-line);border-radius:8px;overflow:hidden}
+.admin-app .key-figures>div,
+.admin-app .key-figures .kf-main,.admin-app .key-figures>div:first-child{
+  background:transparent;border:0;border-radius:0;box-shadow:none;color:var(--at-ink);padding:20px 22px 18px;
+  border-right:1px solid var(--at-line-soft);border-bottom:1px solid var(--at-line-soft);transition:none}
+.admin-app .key-figures>div:hover{transform:none;box-shadow:none}
+.admin-app .key-figures>div::after,.admin-app .key-figures .kf-main::after,.admin-app .key-figures>div:first-child::after{display:none}
+.admin-app .key-figures span,.admin-app .key-figures .kf-main span,.admin-app .key-figures>div:first-child span{
+  font:500 13px/1.3 var(--at-sans);letter-spacing:0;text-transform:none;color:var(--at-grey)}
+.admin-app .key-figures strong,.admin-app .key-figures .kf-main strong,.admin-app .key-figures>div:first-child strong{
+  font:400 44px/1 var(--at-display);letter-spacing:-.01em;color:var(--at-ink);margin:12px 0 6px;font-variant-numeric:lining-nums tabular-nums}
+.admin-app .key-figures .booking-state{font:400 30px/1.05 var(--at-display)}
+.admin-app .key-figures small,.admin-app .key-figures .kf-main small,.admin-app .key-figures>div:first-child small{color:var(--at-grey);font-size:12.5px}
+.admin-app .key-figures strong.negative{color:var(--at-neg)}
+/* Det viktigaste talet markeras bara med en mässingslinje */
+.admin-app .key-figures .kf-main,.admin-app .key-figures>div:first-child{box-shadow:inset 3px 0 0 var(--at-brass)}
+
+/* Knappar: rektangulära, lugna */
+.admin-app .admin-primary,.admin-app .danger-button{border-radius:6px;padding:11px 18px;font:600 14px/1.2 var(--at-sans);letter-spacing:0;background:var(--at-espresso);color:#f4efe9;box-shadow:none;border:1px solid var(--at-espresso)}
+.admin-app .admin-primary:hover{background:#3d2c25}
+.admin-app .danger-button{background:var(--at-neg);border-color:var(--at-neg)}
+.admin-app .secondary-button,.admin-app .day-controls button{border-radius:6px;border:1px solid var(--at-line);background:transparent;color:var(--at-ink);font-weight:500;letter-spacing:0;padding:9px 14px;box-shadow:none}
+.admin-app .secondary-button:hover,.admin-app .day-controls button:hover{background:var(--at-panel);border-color:#bdb7b0}
+.admin-app .text-button{color:var(--at-brown);text-decoration:underline;text-decoration-color:var(--at-line);text-underline-offset:4px}
+.admin-app .counter-buttons button{border-radius:6px;border:1px solid var(--at-line);background:transparent;box-shadow:none;color:var(--at-ink)}
+.admin-app .counter-buttons output{font:400 48px/1 var(--at-display);font-variant-numeric:lining-nums tabular-nums}
+.admin-app :focus-visible{outline:2px solid var(--at-brass);outline-offset:2px}
+
+/* Fält */
+.admin-app input,.admin-app select,.admin-app textarea{background:#fff;border:1px solid var(--at-line);border-radius:6px;box-shadow:none}
+.admin-app input:focus,.admin-app select:focus,.admin-app textarea:focus{border-color:var(--at-brown);box-shadow:0 0 0 3px rgba(180,154,106,.25)}
+.admin-app label,.admin-app .config-grid label{color:var(--at-grey);font-size:13px;letter-spacing:0;text-transform:none;font-weight:500}
+.admin-app .admin-checkbox{font-size:14px;color:var(--at-ink)}
+.admin-app .admin-checkbox input{accent-color:var(--at-espresso)}
+
+/* Meddelanden och varningar */
+.admin-app .admin-notice{background:var(--at-panel);border:1px solid var(--at-line);border-left:3px solid var(--at-brass);border-radius:6px;box-shadow:none}
+.admin-app .admin-notice.success{border-left-color:var(--at-brown)}
+.admin-app .budget-warnings,.admin-app .closed-banner,.admin-app #email-setup,.admin-app .finance-lock-banner{background:transparent;border:1px solid var(--at-line);border-left:3px solid var(--at-brown);border-radius:6px;color:var(--at-ink)}
+
+/* Tabeller */
+.admin-app .data-table th{color:var(--at-grey);font-size:13px;font-weight:500;letter-spacing:0;text-transform:none;border-bottom:1px solid var(--at-line)}
+.admin-app .data-table td{border-bottom:1px solid var(--at-line-soft)}
+.admin-app .data-table tbody tr:hover td,.admin-app .data-table tbody tr:hover th{background:#efedea}
+
+/* Bokningar */
+.admin-app .booking-row{padding:18px 22px}
+.admin-app .booking-time strong{font:400 30px/1 var(--at-display);font-variant-numeric:lining-nums tabular-nums}
+.admin-app .booking-status{border-radius:4px;background:transparent;border:1px solid var(--at-line);color:var(--at-brown);font-weight:500;letter-spacing:0;text-transform:none;padding:3px 8px}
+.admin-app .pill-tag{border-radius:4px;letter-spacing:0;text-transform:none;font-size:12px}
+.admin-app .stock-now{font:400 22px/1 var(--at-display)}
+.admin-app .stock-group h3,.admin-app .stock-cat{letter-spacing:0;text-transform:none}
+
+/* Klocka: diskret, inte en stor ruta */
+.admin-app .live-clock{background:none;box-shadow:none;color:var(--at-ink);padding:0;margin:0 0 18px;border-radius:0;gap:12px}
+.admin-app .live-clock strong{font:400 40px/1 var(--at-display);letter-spacing:0;color:var(--at-ink)}
+.admin-app .live-clock span{font:400 14px/1.3 var(--at-sans);color:var(--at-grey);text-transform:none}
+
+/* Drop-in, bank, prognos */
+.admin-app .dropin-mode{border-radius:6px;border-color:var(--at-line)}
+.admin-app .dropin-mode .mode-btn{background:transparent;color:var(--at-ink)}
+.admin-app .dropin-mode .mode-btn[aria-pressed="true"]{background:var(--at-espresso);color:#f4efe9}
+.admin-app .dropin-suggest{background:transparent;border:1px solid var(--at-line);border-radius:6px}
+.admin-app .dropin-suggest strong{font:400 30px/1 var(--at-display)}
+.admin-app .dropin-list h3{text-transform:none;letter-spacing:0;font-size:13px;color:var(--at-grey)}
+.admin-app .dropin-item strong{font:400 22px/1 var(--at-display)}
+.admin-app .bank-badge{text-transform:none;letter-spacing:0;font:500 12px/1 var(--at-sans);border-radius:4px;padding:4px 7px}
+.admin-app .bank-tabs button{border-radius:6px}
+.admin-app .bank-tabs button[aria-selected="true"]{background:var(--at-espresso);border-color:var(--at-espresso)}
+.admin-app .lock-tag{font:500 11px/1 var(--at-sans);color:var(--at-brass);margin-left:6px;opacity:1}
+
+/* Menyn: espresso med mässingsmarkering */
+.admin-app .admin-drawer{background:var(--at-espresso);border-right:0;box-shadow:none}
+.admin-app .admin-drawer .admin-tabs button,.admin-app .admin-drawer .admin-tabs a{font:400 15px/1.3 var(--at-sans);color:#d9d1c9;border-radius:4px;padding:10px 14px;letter-spacing:0}
+.admin-app .admin-drawer .admin-tabs button:hover,.admin-app .admin-drawer .admin-tabs a:hover{background:rgba(255,255,255,.05);color:#fff}
+.admin-app .admin-drawer .admin-tabs button[aria-current=page]{background:transparent;color:#fff;font-weight:600}
+.admin-app .admin-drawer .admin-tabs button[aria-current=page]::before{left:0;top:9px;bottom:9px;width:2px;background:var(--at-brass)}
+.admin-app .admin-drawer hr{border-top-color:rgba(255,255,255,.1);margin:10px 14px}
+.admin-app .admin-drawer .tab-count{background:transparent;border:1px solid rgba(180,154,106,.6);color:var(--at-brass);font-weight:600}
+
+/* AI och dialoger */
+.admin-app .ai-msg.user{background:var(--at-espresso);border-radius:8px}
+.admin-app .ai-msg.assistant{background:var(--at-panel);border:1px solid var(--at-line);border-radius:8px}
+.admin-app .ai-suggest button{border-radius:6px}
+.admin-app dialog.action-dialog{border:1px solid var(--at-line);border-radius:10px;box-shadow:0 30px 60px -30px rgba(36,26,22,.45)}
+.admin-app dialog.action-dialog h2{font:400 28px/1.15 var(--at-display)}
+.admin-app .login-panel h2{font:400 44px/1.05 var(--at-display)}
+
+/* Dator: menyn blir en fast sidopanel när man är inloggad */
+@media (min-width:1100px){
+  .admin-app:has(#admin-tabs:not([hidden])) .admin-drawer{transform:none;top:0;width:232px;padding:26px 14px 24px;z-index:35}
+  .admin-app:has(#admin-tabs:not([hidden])) .admin-topbar,
+  .admin-app:has(#admin-tabs:not([hidden])) .admin-workspace,
+  .admin-app:has(#admin-tabs:not([hidden])) main{margin-left:232px}
+  .admin-app:has(#admin-tabs:not([hidden])) .admin-workspace{width:auto;max-width:1240px;padding-left:44px;padding-right:44px}
+  .admin-app:has(#admin-tabs:not([hidden])) .menu-toggle,
+  .admin-app:has(#admin-tabs:not([hidden])) .drawer-backdrop{display:none!important}
+  .admin-app:has(#admin-tabs:not([hidden])) .admin-brand{visibility:hidden}
+  .admin-app:has(#admin-tabs:not([hidden])) .admin-drawer::before{content:"Albert NO.485";display:block;font:400 22px/1.1 var(--at-display);color:#f1ebe4;padding:0 14px 22px;margin-bottom:12px;border-bottom:1px solid rgba(255,255,255,.1)}
+}
+@media (max-width:900px){.admin-app .workspace-heading h1{font-size:38px}.admin-app .key-figures strong{font-size:36px}}
+@media (max-width:480px){
+  .admin-app .workspace-heading h1{font-size:34px}
+  .admin-app .admin-card{padding:18px}
+  .admin-app .key-figures>div,.admin-app .key-figures .kf-main,.admin-app .key-figures>div:first-child{padding:16px}
+  .admin-app .key-figures strong,.admin-app .key-figures .kf-main strong,.admin-app .key-figures>div:first-child strong{font-size:30px;margin:8px 0 4px}
+  .admin-app .key-figures span{font-size:12px}
+  .admin-app .live-clock strong{font-size:32px}
+}
+
+/* Ateljé: finjusteringar */
+.admin-app .key-figures strong,.admin-app .key-figures .kf-main strong,.admin-app .key-figures>div:first-child strong{font-size:clamp(28px,2.7vw,44px);white-space:nowrap}
+.admin-app .live-clock span{display:none}
+.admin-app .waste-head output{font:400 44px/1 var(--at-display);font-variant-numeric:lining-nums tabular-nums}
+/* Dagknapparna behövs bara där innehållet följer valt datum */
+.admin-app[data-view]:not([data-view="day"]):not([data-view="tasks"]):not([data-view="history"]) .day-controls{display:none}
+@media (min-width:1100px){
+  .admin-app .daily-controls{grid-template-columns:repeat(3,minmax(0,1fr));align-items:start}
+  .admin-app .daily-controls .dropin-card{grid-column:1/3;grid-row:1/3}
+  .admin-app .daily-controls .stock-card{grid-column:3;grid-row:1}
+  .admin-app .daily-controls .waste-card{grid-column:3;grid-row:2}
+}

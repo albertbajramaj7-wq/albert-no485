@@ -117,7 +117,7 @@
   }
   function switchView(value) {
     if (!['day', 'phone', 'stock', 'purchase', 'tasks', 'history', 'bank', 'economy', 'ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) || (['bank', 'economy', 'ai', 'budget', 'stats', 'menu', 'staff', 'config'].includes(value) && !isAdmin())) value = 'day';
-    view = value;
+    view = value; document.body.dataset.view = value;
     document.querySelectorAll('[data-panel]').forEach(panel => panel.hidden = panel.dataset.panel !== value);
     document.querySelectorAll('[data-view]').forEach(b => { if (b.dataset.view === value) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current'); });
     $('view-title').textContent = { day: 'Dagsvy', phone: 'Telefonbokning', stock: 'Lager', purchase: 'Inköp', tasks: 'Arbetsuppgifter', history: 'Historik', bank: 'Ekonomi & Bank', economy: 'Ekonomi', ai: 'AI-assistent', budget: 'Veckobudget', stats: 'Statistik', menu: 'Meny', staff: 'Personal', config: 'Inställningar' }[value];
