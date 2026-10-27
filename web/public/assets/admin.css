@@ -720,3 +720,4 @@
 
 /* Visa tecken som text, aldrig som färgade emojis (iPhone) */
 .admin-app,.admin-app *{font-variant-emoji:text}
+.admin-app .eco-actions{display:flex;gap:10px;flex-wrap:wrap}
