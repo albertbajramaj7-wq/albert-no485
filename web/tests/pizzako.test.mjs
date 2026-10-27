@@ -85,3 +85,22 @@ async function cfg() {
     arrivalMin: c.arrival_min, horizonDays: c.horizon_days, maxCount: c.max_count, maxGuests: c.max_guests, lunchFirst: c.lunch_first, lunchLast: c.lunch_last,
     dinnerFirst: c.dinner_first, dinnerLast: c.dinner_last, avgPizzaPrice: c.avg_pizza_price, wasteCost: c.waste_cost };
 }
+
+test('bokning: kunden får tiden när sista pizzan är klar, flyttas fram om kön är upptagen', async () => {
+  const day = '2026-11-04'; // onsdag, vintertid
+  sql(t.db, 'update settings set pizza_min = 3, pizza_sec = 150, arrival_min = 10 where id = 1');
+  t.clock.now = '2026-11-01T10:00:00+01:00';
+  const slots = async n => (await t.call('GET', `/api/availability?date=${day}&count=${n}&mode=away&guests=0`)).body.slots;
+  // Ledig kö: samma tider som förut, t.ex. 18:13
+  assert.ok((await slots(4)).some(s => s.time === '18:13' && s.bookable));
+  const a = await t.call('POST', '/api/bookings', bookingBody({ date: day, time: '18:13', count: 4, mode: 'away', guests: 0 }), { headers: { 'Idempotency-Key': crypto.randomUUID() } });
+  assert.equal(a.status, 201, JSON.stringify(a.body));        // kön 18:03–18:13
+  assert.equal(a.body.arrival, '18:03');                       // kom 10 min före
+  // Nästa kund vill också ha 4 pizzor runt 18:13 → får 18:23 (4 × 2,5 min efter förra)
+  const s2 = await slots(4);
+  assert.ok(!s2.some(s => s.time === '18:13' && s.bookable));
+  assert.ok(s2.some(s => s.time === '18:23' && s.bookable), JSON.stringify(s2.filter(s => s.time > '18:00' && s.time < '18:40')));
+  const b = await t.call('POST', '/api/bookings', bookingBody({ date: day, time: '18:23', count: 4, mode: 'away', guests: 0 }), { headers: { 'Idempotency-Key': crypto.randomUUID() } });
+  assert.equal(b.status, 201, JSON.stringify(b.body));
+  sql(t.db, 'update settings set pizza_min = 2, pizza_sec = 120 where id = 1');
+});

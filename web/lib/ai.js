@@ -4,6 +4,7 @@
 import { AppError } from './supabase.js';
 import { computeBudget } from './budget.js';
 import { fortnoxSummary } from './fortnox.js';
+import { bankConfig, forecast, matchFortnox } from './bank.js';
 
 const API = 'https://api.anthropic.com/v1/messages';
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
@@ -27,6 +28,8 @@ export const TOOLS = [
   { name: 'inkop', description: 'Inköpsordrar: utkast, skickade och mottagna, med rader och belopp.',
     input_schema: { type: 'object', properties: {} } },
   { name: 'ekonomi', description: 'Ekonomiöversikt från Fortnox (bokföringen): banksaldo, skattekonto, moms att betala, personalskatt, arbetsgivaravgifter, leverantörsskulder, resultat hittills i år (intäkter, varukostnad, personal, övriga kostnader), största kostnadsposter samt obetalda leverantörs- och kundfakturor med förfallodatum. Siffrorna gäller det som är bokfört.',
+    input_schema: { type: 'object', properties: {} } },
+  { name: 'bank', description: 'Företagets bankkonto (Danske Bank, endast läsning): saldo, insättningar och uttag denna månad och vecka jämfört med samma dagar förra månaden, kostnader per kategori och motpart, transaktioner senaste 120 dagarna, samt kassaflödesprognos 7/14/30 dagar och matchning mot obetalda Fortnox-fakturor. Prognosen är en UPPSKATTNING. Kräver bankbehörighet.',
     input_schema: { type: 'object', properties: {} } },
   { name: 'meny_och_installningar', description: 'Menyn med priser samt bokningsinställningar (öppettider, ugnskapacitet, sittplatser, snittpris per pizza).',
     input_schema: { type: 'object', properties: {} } },
@@ -86,6 +89,24 @@ export async function runTool(name, input, { rpc, actor, env }) {
       if (!f.connected) return { fel: 'Fortnox är inte kopplat.' };
       return { hamtat: f.overviewAt || f.syncedAt, oversikt: f.overview || null, banksaldo: f.bankBalance };
     }
+    case 'bank': {
+      const cfg = bankConfig(env);
+      if (!cfg.env) return { fel: 'Bankkopplingen är inte aktiverad i den här miljön.' };
+      const d = await rpc('api_bank', { actor, action: 'analysis_data', env: cfg.env }); // 403 utan bankbehörighet
+      let payables = null;
+      try { payables = (await rpc('api_fortnox', { actor, action: 'status' }))?.overview?.payables || null; } catch { payables = null; }
+      const o = d.overview || {};
+      return {
+        miljo: cfg.env === 'live' ? 'riktiga bankdata' : 'TESTDATA från banken (' + cfg.env + ') – inte företagets riktiga konto',
+        faktiskt: { idag: d.today, saldoSek: o.balanceSek, tillgangligtSek: o.availableSek ?? 'stöds inte av banken', konton: o.accounts, senasteSynk: o.sync,
+          manad: { in: o.monthIn, ut: o.monthOut, netto: (o.monthIn || 0) - (o.monthOut || 0) },
+          sammaDagarForraManaden: { in: o.prevMonthInSameDays, ut: o.prevMonthOutSameDays },
+          veckan: { in: o.weekIn, ut: o.weekOut }, kategorier: o.categories, storstaKostnader: o.topCosts },
+        transaktioner: (d.transactions || []).slice(-250),
+        uppskattning_prognos: forecast({ overview: o, transactions: d.transactions, today: d.today, payables }),
+        fortnoxMatchning: matchFortnox({ transactions: d.transactions, payables, today: d.today }),
+      };
+    }
     case 'meny_och_installningar': {
       const [menu, cfg] = await Promise.all([rpc('api_menu', {}), rpc('api_admin_settings', { actor, action: 'get' })]);
       return { meny: (menu || []).map(m => pick(m, ['category', 'name', 'price'])),
@@ -108,7 +129,8 @@ Regler:
 - Du kan bara läsa. Du kan inte ändra bokningar, lager, budget eller skicka något. Föreslå i stället vad ägaren kan göra i admin.
 - Försäljningen i statistiken är pizzor (bokade + drop-in), inte kronor, om inte veckobudgeten har omsättning ifylld.
 - Ge gärna 1–3 konkreta förslag när det passar, men håll dig till det som datan stödjer.
-- Du får inga personuppgifter om gäster och ska inte be om dem.`;
+- Du får inga personuppgifter om gäster och ska inte be om dem.
+- Bank: verktyget "bank" är endast läsning. Du kan aldrig göra betalningar eller överföringar. Skilj alltid på FAKTISKA belopp (saldo, bokförda transaktioner, Fortnox-fakturor) och UPPSKATTNINGAR (prognos, återkommande kostnader, förväntade intäkter) – skriv ut ordet "uppskattning" vid prognoser. Hitta aldrig på belopp. Är det testdata, säg det.`;
 }
 
 function cleanMessages(messages) {
