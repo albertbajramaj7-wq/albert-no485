@@ -464,6 +464,7 @@
   document.querySelectorAll('[data-bank-q]').forEach(b => b.addEventListener('click', () => { switchView('ai'); askAi(b.dataset.bankQ); }));
 
   $('bud-print').addEventListener('click', printBudget);
+  $('eco-print').addEventListener('click', printEconomy);
 
   // ---------- Klocka ----------
   const clockFmt = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Stockholm', hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -876,10 +877,7 @@
     renderBudgetYear(); renderBudgetSettings(); renderFortnox();
   }
 
-  // Infoblad (PDF): vad som får spenderas på varje post den valda veckan.
-  function printBudget() {
-    const w = budgetPreview(), title = 'Veckobudget ' + weekLabel(budWeek);
-    const css = 'body{font:13px/1.5 "Helvetica Neue",Arial,sans-serif;color:#111;margin:40px 44px;max-width:760px}'
+  const sheetCss = 'body{font:13px/1.5 "Helvetica Neue",Arial,sans-serif;color:#111;margin:40px 44px;max-width:760px}'
       + 'h1{font-size:30px;font-weight:300;letter-spacing:-.02em;margin:0 0 2px}h2{font-size:15px;font-weight:600;margin:26px 0 8px}'
       + '.meta{color:#6e6e6e;margin:0 0 22px}.sum{display:grid;grid-template-columns:repeat(4,1fr);gap:2px;margin:0 0 6px}'
       + '.sum div{background:#f4f4f4;padding:12px 14px}.sum div:first-child{background:#111;color:#fff}.sum span{display:block;font-size:11px;color:#6e6e6e}'
@@ -887,6 +885,36 @@
       + 'table{width:100%;border-collapse:collapse}th,td{padding:8px 8px;border-bottom:1px solid #e3e3e3;text-align:left}th{font-weight:500;color:#6e6e6e;font-size:11px;border-bottom:1px solid #111}'
       + 'td.n,th.n{text-align:right;white-space:nowrap}td:first-child,th:first-child{width:auto}tr.big td{font-size:15px;font-weight:600}.neg{color:#a1342a}.foot{color:#6e6e6e;font-size:11px;margin-top:22px}'
       + '@page{margin:14mm}@media print{body{margin:0}}';
+
+  // Faktablad (PDF) för Ekonomi: det som är bokfört i Fortnox.
+  function printEconomy() {
+    const f = economy, o = f?.overview, title = 'Ekonomi – faktablad';
+    const k = n => esc(krw(n)), row = (label, value, cls) => '<tr' + (cls ? ' class="' + cls + '"' : '') + '><td>' + esc(label) + '</td><td class="n' + (value < 0 ? ' neg' : '') + '">' + k(value) + '</td></tr>';
+    let body = '<h1>' + esc(title) + '</h1><p class="meta">' + esc(f?.companyName || 'Albert NO.485') + ' · utskrivet ' + esc(readable(today()))
+      + (o?.asOf ? ' · bokfört t.o.m. ' + esc(o.asOf) : '') + (f?.overviewAt ? ' · hämtat från Fortnox ' + esc(new Date(f.overviewAt).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' })) : '') + '</p>';
+    if (!f?.connected || !o) { printDoc(title, body + '<p>Det finns ingen ekonomiöversikt ännu. Koppla Fortnox och tryck "Hämta nu" under Ekonomi.</p>', sheetCss); return; }
+    const b = o.balances, r = o.result;
+    body += '<div class="sum"><div><span>Banksaldo</span><strong>' + k(b.bank) + '</strong></div><div><span>Intäkter i år</span><strong>' + k(r.revenue) + '</strong></div>'
+      + '<div><span>Resultat i år</span><strong' + (r.result < 0 ? ' class="neg"' : '') + '>' + k(r.result) + '</strong></div><div><span>Att betala inom 7 dagar</span><strong>' + (o.payables ? k(o.payables.next7) : '–') + '</strong></div></div>';
+    const pct = v => v === null || v === undefined ? '' : ' (' + String(v).replace('.', ',') + ' %)';
+    body += '<h2>Resultat hittills i år' + (o.financialYear ? ' · ' + esc(o.financialYear.from) + ' – ' + esc(o.asOf) : '') + '</h2><table><tr><th>Post</th><th class="n">Belopp</th></tr>'
+      + row('Intäkter', r.revenue) + row('Varukostnad' + pct(r.goodsPct), r.goods ? -r.goods : 0) + row('Personal' + pct(r.staffPct), r.staff ? -r.staff : 0) + row('Övriga kostnader' + pct(r.externalPct), r.external ? -r.external : 0)
+      + (r.depreciation ? row('Avskrivningar', -r.depreciation) : '') + (r.financial ? row('Finansiella poster', r.financial) : '') + row('Resultat', r.result, 'big') + '</table>';
+    body += '<h2>Skulder och konton</h2><table><tr><th>Konto</th><th class="n">Belopp</th></tr>'
+      + row('Skattekonto', b.taxAccount) + row('Moms att betala', b.vatToPay) + row('Personalskatt', b.payrollTax) + row('Arbetsgivaravgifter', b.employerFees) + row('Leverantörsskulder', b.payables)
+      + (b.taxDebt ? row('Skatteskuld', b.taxDebt) : '') + (b.receivables ? row('Kundfordringar', b.receivables) : '') + '</table>';
+    const list = (items, empty) => items?.length ? '<table><tr><th>Namn</th><th>Förfaller</th><th class="n">Belopp</th></tr>' + items.map(i => '<tr><td>' + esc(i.name) + '</td><td' + (i.due && i.due < today() ? ' class="neg"' : '') + '>' + esc(i.due || '–') + '</td><td class="n">' + k(i.amount) + '</td></tr>').join('') + '</table>' : '<p>' + esc(empty) + '</p>';
+    body += '<h2>Kommande betalningar (obetalda leverantörsfakturor)</h2>' + (o.payables ? list(o.payables.list, 'Inga obetalda leverantörsfakturor.') + (o.payables.overdue > 0 ? '<p class="neg">Förfallet: ' + k(o.payables.overdue) + '</p>' : '') : '<p>Kunde inte hämtas.</p>');
+    if (o.receivables) body += '<h2>Obetalda kundfakturor</h2>' + list(o.receivables.list, 'Inga obetalda kundfakturor.');
+    if (o.topCosts?.length) body += '<h2>Största kostnaderna i år</h2><table><tr><th>Konto</th><th class="n">Belopp</th></tr>' + o.topCosts.map(c => '<tr><td>' + esc(c.account + ' ' + (c.name || '')) + '</td><td class="n">' + k(c.amount) + '</td></tr>').join('') + '</table>';
+    body += '<p class="foot">Siffrorna är det som är bokfört i Fortnox. Det som inte är bokfört ännu, till exempel dagens försäljning före Z-rapporten, syns inte.' + (o.notes?.length ? ' ' + esc(o.notes.join(' ')) : '') + '</p>';
+    printDoc(title, body, sheetCss);
+  }
+
+  // Infoblad (PDF): vad som får spenderas på varje post den valda veckan.
+  function printBudget() {
+    const w = budgetPreview(), title = 'Veckobudget ' + weekLabel(budWeek);
+    const css = sheetCss;
     let body = '<h1>' + esc(title) + '</h1><p class="meta">Albert NO.485 · utskriven ' + esc(readable(today())) + (w?.updatedBy ? ' · sparad av ' + esc(w.updatedBy) : '') + '</p>';
     if (!w?.computed) {
       body += '<p>Veckans omsättning är inte ifylld ännu. Fyll i den under Veckobudget så räknas det här bladet fram.</p>';
