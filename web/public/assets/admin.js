@@ -847,7 +847,7 @@
     // Formulär
     $('bud-revenue-label').textContent = s.reportBasis === 'inkl' ? 'Omsättning inkl moms (kr)' : 'Omsättning ex moms (kr)';
     $('bud-revenue').value = fmtInput(w?.input.revenue); $('bud-vat').value = fmtInput(w?.input.salesVat);
-    $('bud-card').value = fmtInput(w?.input.cardAmount); $('bud-cardcount').value = fmtInput(w?.input.cardCount);
+    $('bud-card').value = fmtInput(w?.input.cardAmount); $('bud-cardcount').value = fmtInput(w?.input.cardCount); $('bud-tips').value = fmtInput(w?.input.tips);
     $('bud-kind').value = w?.kind || 'actual'; $('bud-note').value = w?.note || '';
     $('bud-sources').textContent = (fx?.connected ? 'Fortnox är kopplat' + (fx.syncedAt ? ', senast hämtat ' + new Date(fx.syncedAt).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }) : '') + '. Leverantörsfakturor visas som förslag under Faktiskt använt. Caspeco är inte kopplat ännu, så omsättningen fyller du i här.' : 'Fortnox och Caspeco är inte kopplade ännu. Tills dess fyller du i siffrorna här.') + (w?.received ? ' Mottagna leveranser i admin den här veckan: ' + krd(w.received) + ' ex moms.' : '');
     // Tabell
@@ -870,6 +870,7 @@
     if (w?.computed) {
       const extra = (label, value) => { const tr = el('tr', undefined, 'budget-sum'); tr.append(el('th', label), el('td', ''), el('td', krd(value)), el('td'), el('td'), el('td'), el('td'), el('td')); body.append(tr); };
       extra('Buffert', w.buffer); extra('Momsreserv', w.vatReserve); extra('Summa avsättningar', w.reserve);
+      if (w.tips) extra('Dricks att betala ut till personalen (utöver budgeten)', w.tips);
     }
     table.append(body);
     $('bud-fill-fortnox').hidden = !Object.keys(sug).length;
@@ -934,7 +935,8 @@
     body += '</table><h2>Det här ska ligga kvar på kontot</h2><table><tr><th>Avsättning</th><th class="n">Belopp</th></tr>'
       + '<tr><td>Momsreserv (betalas till Skatteverket)</td><td class="n">' + k(w.vatReserve) + '</td></tr>'
       + '<tr><td>Buffert</td><td class="n">' + k(w.buffer) + '</td></tr>'
-      + '<tr class="big"><td>Summa</td><td class="n">' + k((w.vatReserve || 0) + (w.buffer || 0)) + '</td></tr></table>'
+      + (w.tips ? '<tr><td>Dricks (betalas ut till personalen)</td><td class="n">' + k(w.tips) + '</td></tr>' : '')
+      + '<tr class="big"><td>Summa</td><td class="n">' + k((w.vatReserve || 0) + (w.buffer || 0) + (w.tips || 0)) + '</td></tr></table>'
       + '<h2>Saldo</h2><table><tr><td>Ingående saldo</td><td class="n">' + k(w.balanceIn) + '</td></tr><tr><td>Veckans plus/minus</td><td class="n' + (w.plusMinus < 0 ? ' neg' : '') + '">' + k(w.plusMinus) + '</td></tr><tr class="big"><td>Saldo efter veckan</td><td class="n">' + k(w.balanceOut) + '</td></tr></table>'
       + '<p class="foot">Att använda = veckans budget för posten plus det som blev över förra veckan. Kvar förs vidare till nästa vecka. Siffrorna kommer från veckobudgeten i admin' + (w.note ? '. Anteckning: ' + esc(w.note) : '') + '.</p>';
     printDoc(title, body, css);
@@ -1019,7 +1021,7 @@
     return s;
   }
   async function saveBudgetWeek() {
-    const nums = { revenue: parseNum($('bud-revenue').value), salesVat: parseNum($('bud-vat').value), cardAmount: parseNum($('bud-card').value), cardCount: parseNum($('bud-cardcount').value) };
+    const nums = { revenue: parseNum($('bud-revenue').value), salesVat: parseNum($('bud-vat').value), cardAmount: parseNum($('bud-card').value), cardCount: parseNum($('bud-cardcount').value), tips: parseNum($('bud-tips').value) };
     if (Object.values(nums).some(Number.isNaN)) { note('Kontrollera siffrorna. Använd bara siffror, gärna med komma för ören.'); return; }
     const actuals = {}; let bad = false;
     document.querySelectorAll('.budget-actual').forEach(i => { const n = parseNum(i.value); if (Number.isNaN(n)) bad = true; else if (n !== null) actuals[i.dataset.key] = n; });

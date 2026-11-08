@@ -115,6 +115,7 @@ export function normalizeWeek(w, settings) {
     salesVat: amount(w.salesVat, 'moms'),
     cardAmount: amount(w.cardAmount, 'kortbelopp'),
     cardCount: w.cardCount === null || w.cardCount === undefined || w.cardCount === '' ? null : Math.round(num(w.cardCount, 0, 1000000, 'Ogiltigt antal kortköp.')),
+    tips: amount(w.tips, 'dricks'),
     note: text(w.note, 300),
     actuals,
   };
@@ -160,7 +161,7 @@ export function computeBudget(settingsInput, weeksInput, received = {}) {
   const carry = {};
   let balance = s.startBalance;
   const weeks = [...weeksInput].sort((a, b) => a.weekStart.localeCompare(b.weekStart)).map(w => {
-    const base = { ...w, input: { revenue: w.revenue ?? null, salesVat: w.salesVat ?? null, cardAmount: w.cardAmount ?? null, cardCount: w.cardCount ?? null }, week: isoWeek(w.weekStart), received: received[w.weekStart] ?? null, balanceIn: r2(balance) };
+    const base = { ...w, input: { revenue: w.revenue ?? null, salesVat: w.salesVat ?? null, cardAmount: w.cardAmount ?? null, cardCount: w.cardCount ?? null, tips: w.tips ?? null }, week: isoWeek(w.weekStart), received: received[w.weekStart] ?? null, balanceIn: r2(balance) };
     if (w.revenue === null || w.revenue === undefined) {
       return { ...base, computed: false, status: 'Fyll i omsättning', balanceOut: r2(balance), free: r2(balance - positivePots(carry)) };
     }
@@ -195,6 +196,9 @@ export function computeBudget(settingsInput, weeksInput, received = {}) {
       if (!example) carry[p.key] = p.out;
     }
     const buffer = revEx * s.pct.buffer;
+    // Dricks är inte restaurangens pengar: den kommer in (oftast via kort) och ska betalas ut till personalen.
+    // Den sätts undan och påverkar varken budgeten eller saldot.
+    const tips = w.tips ?? 0;
     const reserve = posts.reduce((n, p) => n + p.budget, 0) + buffer + salesVat;
     const left = salesInkl - reserve;
     const plusMinus = salesInkl - used - buffer - salesVat;
@@ -207,7 +211,7 @@ export function computeBudget(settingsInput, weeksInput, received = {}) {
       status: example ? 'Exempel, förs inte vidare' : posts.some(p => p.actual === null) ? 'Utfall saknas för vissa poster' : 'Klar',
       revenueEx: r2(revEx), salesVat: r2(salesVat), salesInkl: r2(salesInkl),
       perOpenDay: r2(revEx / s.openDays), cardAmount: r2(cardAmount), cardCount,
-      posts: posts.map(round), buffer: r2(buffer), vatReserve: r2(salesVat),
+      posts: posts.map(round), buffer: r2(buffer), vatReserve: r2(salesVat), tips: r2(tips),
       purchaseVat: r2(posts.reduce((n, p) => n + (p.key === 'staff' ? 0 : p.vat), 0)),
       reserve: r2(reserve), left: r2(left), plusMinus: r2(plusMinus),
       goodsPct: goodsActual === undefined || !revEx ? null : r2(goodsActual / (1 + s.purchaseVat.goods) / revEx * 100),
