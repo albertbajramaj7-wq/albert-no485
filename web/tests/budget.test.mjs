@@ -79,3 +79,16 @@ test('admin sparar inställningar och veckor, personal har inte åtkomst', async
   assert.equal(again.body.weeks.length, 1); assert.equal(again.body.weeks[0].revenue, 41000);
   assert.equal((await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-10-12', revenue: 5 } }, { token: staff })).status, 403);
 });
+
+test('dricks sätts undan och påverkar inte budgeten eller saldot', async () => {
+  const without = await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-02', revenue: 26417.76, actuals: {} } }, { token: owner });
+  const w0 = without.body.weeks.find(w => w.weekStart === '2026-11-02');
+  const withTips = await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-02', revenue: 26417.76, tips: 1250.5, actuals: {} } }, { token: owner });
+  assert.equal(withTips.status, 200, JSON.stringify(withTips.body));
+  const w1 = withTips.body.weeks.find(w => w.weekStart === '2026-11-02');
+  assert.equal(w1.tips, 1250.5);
+  assert.equal(w1.input.tips, 1250.5);
+  assert.equal(w1.left, w0.left);
+  assert.equal(w1.balanceOut, w0.balanceOut);
+  assert.equal((await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-02', revenue: 1000, tips: -5 } }, { token: owner })).status, 400);
+});
