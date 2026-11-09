@@ -464,6 +464,7 @@
   document.querySelectorAll('[data-bank-q]').forEach(b => b.addEventListener('click', () => { switchView('ai'); askAi(b.dataset.bankQ); }));
 
   $('bud-print').addEventListener('click', printBudget);
+  $('bud-vatmode').addEventListener('change', () => { try { localStorage.setItem('albert-bud-vat', $('bud-vatmode').value); } catch {} renderBudget(); });
   $('eco-print').addEventListener('click', printEconomy);
 
   // ---------- Klocka ----------
@@ -817,6 +818,10 @@
   const addDays = (date, n) => { const d = new Date(date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
   const weekNo = date => { const d = new Date(date + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + 3 - ((d.getUTCDay() + 6) % 7)); const y = new Date(Date.UTC(d.getUTCFullYear(), 0, 4)); return 1 + Math.round(((d - y) / 864e5 - 3 + ((y.getUTCDay() + 6) % 7)) / 7); };
   const weekLabel = date => 'Vecka ' + weekNo(date) + ' · ' + new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(date + 'T12:00:00Z')) + '–' + new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(new Date(addDays(date, 6) + 'T12:00:00Z'));
+  // Visa beloppen inklusive eller exklusive moms (sparas per enhet). Sparat utfall är alltid inklusive moms.
+  const budVatMode = () => { try { return localStorage.getItem('albert-bud-vat') === 'ex' ? 'ex' : 'inkl'; } catch { return 'inkl'; } };
+  const postRate = (w, key) => { const p = w?.posts?.find(x => x.key === key); if (p && p.ex > 0) return p.vat / p.ex; return budget?.settings?.purchaseVat?.[key] ?? 0; };
+  const shown = (w, key, v) => v === null || v === undefined ? v : (budVatMode() === 'ex' ? v / (1 + postRate(w, key)) : v);
   async function loadBudget() { const r = await adminCall('budget'); if (r) { budget = r; budWeek = budWeek || mondayOf(today()); renderBudget(); } }
   const budgetPreview = () => budget.weeks.find(w => w.weekStart === budWeek) || null;
   function figure(label, value, sub, strongClass) { const d = el('div'), s = el('strong', value); if (strongClass) s.className = strongClass; d.append(el('span', label), s, el('small', sub || '')); return d; }
@@ -852,19 +857,22 @@
     $('bud-sources').textContent = (fx?.connected ? 'Fortnox är kopplat' + (fx.syncedAt ? ', senast hämtat ' + new Date(fx.syncedAt).toLocaleString('sv-SE', { dateStyle: 'short', timeStyle: 'short' }) : '') + '. Leverantörsfakturor visas som förslag under Faktiskt använt. Caspeco är inte kopplat ännu, så omsättningen fyller du i här.' : 'Fortnox och Caspeco är inte kopplade ännu. Tills dess fyller du i siffrorna här.') + (w?.received ? ' Mottagna leveranser i admin den här veckan: ' + krd(w.received) + ' ex moms.' : '');
     // Tabell
     const table = $('bud-table'); table.replaceChildren();
-    const head = el('tr'); ['Post', 'Beräknas på', 'Sätt undan', 'Från förra veckan', 'Att använda', 'Faktiskt använt', 'Till nästa vecka', 'Status'].forEach(h => head.append(el('th', h)));
+    const vm = budVatMode() === 'ex' ? ' (ex moms)' : ' (inkl moms)';
+    $('bud-vatmode').value = budVatMode();
+    const head = el('tr'); ['Post', 'Beräknas på', 'Sätt undan' + vm, 'Från förra veckan', 'Att använda' + vm, 'Faktiskt använt' + vm, 'Till nästa vecka', 'Status'].forEach(h => head.append(el('th', h)));
     table.append(el('thead')); table.tHead.append(head);
     const body = el('tbody');
     const posts = w?.computed ? w.posts : [...['goods', 'fuel', 'staff', 'other'].map((k, i) => ({ key: k, name: ['Varuinköp', 'Drivmedel', 'Personal, total kostnad', 'Övrig löpande drift'][i] })), ...budget.fixed.map(f => ({ key: f.key, name: f.name })), { key: 'card', name: 'Kortavgift, uppskattad' }];
     posts.forEach(p => {
       const tr = el('tr'); if (p.missing) tr.className = 'budget-missing';
       const input = el('input'); input.inputMode = 'decimal'; input.className = 'budget-actual'; input.dataset.key = p.key; input.autocomplete = 'off';
-      input.value = fmtInput(w?.actuals?.[p.key]); input.setAttribute('aria-label', 'Faktiskt använt för ' + p.name);
-      if (sug[p.key] !== undefined) { input.placeholder = 'Fortnox ' + Math.round(sug[p.key]).toLocaleString('sv-SE'); input.dataset.fortnox = sug[p.key]; }
-      else if (p.key === 'goods' && w?.received) input.placeholder = 'Leveranser ' + Math.round(w.received * (1 + s.purchaseVat.goods));
+      const a0 = shown(w, p.key, w?.actuals?.[p.key]); input.value = fmtInput(a0 === undefined || a0 === null ? a0 : Math.round(a0 * 100) / 100); input.setAttribute('aria-label', 'Faktiskt använt för ' + p.name + vm);
+      if (sug[p.key] !== undefined) { const sv = shown(w, p.key, sug[p.key]); input.placeholder = 'Fortnox ' + Math.round(sv).toLocaleString('sv-SE'); input.dataset.fortnox = Math.round(sv * 100) / 100; }
+      else if (p.key === 'goods' && w?.received) input.placeholder = 'Leveranser ' + Math.round(budVatMode() === 'ex' ? w.received : w.received * (1 + s.purchaseVat.goods));
       const actualCell = el('td'); actualCell.append(input);
       const status = el('td', p.status || ''); if (p.status === 'Över budget') status.className = 'negative'; else if (p.status === 'Inom budget') status.className = 'positive';
-      tr.append(el('th', p.name), el('td', p.basis || ''), el('td', p.budget === undefined ? '–' : krd(p.budget)), el('td', p.in === undefined ? '–' : krd(p.in)), el('td', p.available === undefined ? '–' : krd(p.available)), actualCell, el('td', p.out === undefined ? '–' : krd(p.out)), status);
+      const sh = v => v === undefined ? '–' : krd(shown(w, p.key, v));
+      tr.append(el('th', p.name), el('td', p.basis || ''), el('td', sh(p.budget)), el('td', sh(p.in)), el('td', sh(p.available)), actualCell, el('td', sh(p.out)), status);
       body.append(tr);
     });
     if (w?.computed) {
@@ -922,13 +930,14 @@
       printDoc(title, body, css); return;
     }
     const k = n => esc(krd(n));
-    body += '<div class="sum"><div><span>Att spendera totalt</span><strong>' + k(w.posts.reduce((t, p) => t + Math.max(0, p.available || 0), 0)) + '</strong></div>'
+    body += '<div class="sum"><div><span>Att spendera totalt (' + (budVatMode() === 'ex' ? 'ex' : 'inkl') + ' moms)</span><strong>' + k(w.posts.reduce((t, p) => t + Math.max(0, shown(w, p.key, p.available) || 0), 0)) + '</strong></div>'
       + '<div><span>Omsättning ex moms</span><strong>' + k(w.revenueEx) + '</strong></div>'
       + '<div><span>Kvar efter avsättningar</span><strong' + (w.left < 0 ? ' class="neg"' : '') + '>' + k(w.left) + '</strong></div>'
       + '<div><span>Fritt saldo</span><strong>' + k(w.free) + '</strong></div></div>';
-    body += '<h2>Det här kan du spendera den här veckan</h2><table><tr><th>Post</th><th class="n">Att använda</th><th class="n">Använt</th><th class="n">Kvar</th></tr>';
-    for (const p of w.posts) {
-      const used = w.actuals?.[p.key];
+    body += '<h2>Det här kan du spendera den här veckan (' + (budVatMode() === 'ex' ? 'exklusive' : 'inklusive') + ' moms)</h2><table><tr><th>Post</th><th class="n">Att använda</th><th class="n">Använt</th><th class="n">Kvar</th></tr>';
+    for (const p0 of w.posts) {
+      const p = { ...p0, available: shown(w, p0.key, p0.available) };
+      const used = shown(w, p0.key, w.actuals?.[p0.key]);
       const left = (p.available ?? 0) - (used || 0);
       body += '<tr><td>' + esc(p.name) + (p.basis ? '<br><span style="color:#6e6e6e;font-size:11px">' + esc(p.basis) + '</span>' : '') + '</td><td class="n">' + k(p.available) + '</td><td class="n">' + (used === null || used === undefined ? '–' : k(used)) + '</td><td class="n' + (left < 0 ? ' neg' : '') + '">' + k(left) + '</td></tr>';
     }
@@ -1024,7 +1033,8 @@
     const nums = { revenue: parseNum($('bud-revenue').value), salesVat: parseNum($('bud-vat').value), cardAmount: parseNum($('bud-card').value), cardCount: parseNum($('bud-cardcount').value), tips: parseNum($('bud-tips').value) };
     if (Object.values(nums).some(Number.isNaN)) { note('Kontrollera siffrorna. Använd bara siffror, gärna med komma för ören.'); return; }
     const actuals = {}; let bad = false;
-    document.querySelectorAll('.budget-actual').forEach(i => { const n = parseNum(i.value); if (Number.isNaN(n)) bad = true; else if (n !== null) actuals[i.dataset.key] = n; });
+    const wNow = budgetPreview();
+    document.querySelectorAll('.budget-actual').forEach(i => { const n = parseNum(i.value); if (Number.isNaN(n)) bad = true; else if (n !== null) actuals[i.dataset.key] = budVatMode() === 'ex' ? Math.round(n * (1 + postRate(wNow, i.dataset.key)) * 100) / 100 : n; });
     if (bad) { note('Kontrollera beloppen under Faktiskt använt.'); return; }
     const r = await adminCall('budget', { action: 'save_week', week: { weekStart: budWeek, kind: $('bud-kind').value, note: $('bud-note').value, ...nums, actuals } }, weekLabel(budWeek) + ' är sparad.');
     if (r) { budget = r; renderBudget(); }
