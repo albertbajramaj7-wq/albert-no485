@@ -464,6 +464,7 @@
   document.querySelectorAll('[data-bank-q]').forEach(b => b.addEventListener('click', () => { switchView('ai'); askAi(b.dataset.bankQ); }));
 
   $('bud-print').addEventListener('click', printBudget);
+  $('bud-month-print').addEventListener('click', printMonth);
   $('bud-vatmode').addEventListener('change', () => { try { localStorage.setItem('albert-bud-vat', $('bud-vatmode').value); } catch {} renderBudget(); });
   $('eco-print').addEventListener('click', printEconomy);
 
@@ -883,7 +884,7 @@
     table.append(body);
     $('bud-fill-fortnox').hidden = !Object.keys(sug).length;
     $('bud-print').disabled = false;
-    renderBudgetYear(); renderBudgetSettings(); renderFortnox();
+    renderBudgetYear(); renderBudgetSettings(); renderFortnox(); renderMonthPicker();
   }
 
   const sheetCss = 'body{font:13px/1.5 "Helvetica Neue",Arial,sans-serif;color:#111;margin:40px 44px;max-width:760px}'
@@ -949,6 +950,67 @@
       + '<h2>Saldo</h2><table><tr><td>Ingående saldo</td><td class="n">' + k(w.balanceIn) + '</td></tr><tr><td>Veckans plus/minus</td><td class="n' + (w.plusMinus < 0 ? ' neg' : '') + '">' + k(w.plusMinus) + '</td></tr><tr class="big"><td>Saldo efter veckan</td><td class="n">' + k(w.balanceOut) + '</td></tr></table>'
       + '<p class="foot">Att använda = veckans budget för posten plus det som blev över förra veckan. Kvar förs vidare till nästa vecka. Siffrorna kommer från veckobudgeten i admin' + (w.note ? '. Anteckning: ' + esc(w.note) : '') + '.</p>';
     printDoc(title, body, css);
+  }
+
+  // ---------- Månadsrapport (PDF): alla veckor i en månad ihop ----------
+  // En vecka hör till den månad där veckans torsdag ligger (samma regel som veckonummer).
+  const weekMonth = weekStart => addDays(weekStart, 3).slice(0, 7);
+  const monthName = ym => { const t = new Intl.DateTimeFormat('sv-SE', { month: 'long', year: 'numeric', timeZone: 'UTC' }).format(new Date(ym + '-15T12:00:00Z')); return t.charAt(0).toUpperCase() + t.slice(1); };
+  function renderMonthPicker() {
+    const sel = $('bud-month'), keep = sel.value;
+    const months = [...new Set(budget.weeks.filter(w => w.computed && w.kind !== 'example').map(w => weekMonth(w.weekStart)))].sort().reverse();
+    const current = weekMonth(mondayOf(today()));
+    if (!months.includes(current)) months.unshift(current);
+    sel.replaceChildren(...months.map(m => { const o = el('option', monthName(m)); o.value = m; return o; }));
+    sel.value = months.includes(keep) ? keep : months[0];
+  }
+  function printMonth() {
+    const ym = $('bud-month').value, title = 'Månadsrapport ' + monthName(ym);
+    const weeks = budget.weeks.filter(w => weekMonth(w.weekStart) === ym && w.kind !== 'example').sort((a, b) => a.weekStart.localeCompare(b.weekStart));
+    const done = weeks.filter(w => w.computed);
+    const mode = budVatMode(), k = n => esc(krw(n)), sum = f => done.reduce((t, w) => t + (f(w) || 0), 0);
+    let body = '<h1>' + esc(title) + '</h1><p class="meta">Albert NO.485 · utskriven ' + esc(readable(today())) + ' · ' + done.length + (done.length === 1 ? ' vecka' : ' veckor') + ' (vecka räknas till den månad där torsdagen ligger) · kostnader ' + (mode === 'ex' ? 'exklusive' : 'inklusive') + ' moms</p>';
+    if (!done.length) { printDoc(title, body + '<p>Det finns inga ifyllda veckor för den här månaden.</p>', sheetCss); return; }
+    const revEx = sum(w => w.revenueEx), plus = sum(w => w.plusMinus), first = done[0], last = done[done.length - 1];
+    body += '<div class="sum"><div><span>Omsättning ex moms</span><strong>' + k(revEx) + '</strong></div><div><span>Månadens plus/minus</span><strong' + (plus < 0 ? ' class="neg"' : '') + '>' + k(plus) + '</strong></div>'
+      + '<div><span>Saldo vid månadens slut</span><strong' + (last.balanceOut < 0 ? ' class="neg"' : '') + '>' + k(last.balanceOut) + '</strong></div><div><span>Snitt per vecka</span><strong>' + k(revEx / done.length) + '</strong></div></div>';
+    // Försäljning
+    body += '<h2>Försäljning</h2><table><tr><th>Post</th><th class="n">Belopp</th></tr>'
+      + '<tr><td>Omsättning exklusive moms</td><td class="n">' + k(revEx) + '</td></tr>'
+      + '<tr><td>Försäljningsmoms</td><td class="n">' + k(sum(w => w.salesVat)) + '</td></tr>'
+      + '<tr class="big"><td>Försäljning inklusive moms</td><td class="n">' + k(sum(w => w.salesInkl)) + '</td></tr>'
+      + '<tr><td>Varav kortbetalningar</td><td class="n">' + k(sum(w => w.cardAmount)) + '</td></tr>'
+      + (sum(w => w.tips) ? '<tr><td>Dricks (betalas ut till personalen)</td><td class="n">' + k(sum(w => w.tips)) + '</td></tr>' : '') + '</table>';
+    // Kostnader per post: budget mot utfall
+    const keys = []; done.forEach(w => w.posts.forEach(p => { if (!keys.some(x => x.key === p.key)) keys.push({ key: p.key, name: p.name }); }));
+    let tb = 0, ta = 0, tbw = 0, missing = 0;
+    body += '<h2>Kostnader: budget mot utfall</h2><table><tr><th>Post</th><th class="n">Budget</th><th class="n">Använt</th><th class="n">Kvar mot budget</th><th class="n">Av omsättning</th></tr>';
+    for (const { key, name } of keys) {
+      // Skillnad och andel räknas bara på veckor där utfall är ifyllt, så att saknade veckor inte ser ut som besparingar.
+      let b = 0, a = 0, bw = 0, rw = 0, gaps = 0;
+      done.forEach(w => { const p = w.posts.find(x => x.key === key); if (!p) return; const pb = shown(w, key, p.budget) || 0; b += pb; const act = w.actuals?.[key]; if (act === null || act === undefined) gaps++; else { a += shown(w, key, act); bw += pb; rw += w.revenueEx || 0; } });
+      if (!b && !a) continue;
+      tb += b; ta += a; tbw += bw; missing += gaps;
+      const diff = bw - a, share = rw ? Math.round(a / rw * 1000) / 10 : null;
+      body += '<tr><td>' + esc(name) + (gaps ? '<br><span style="color:#6e6e6e;font-size:11px">Utfall saknas ' + gaps + (gaps === 1 ? ' vecka' : ' veckor') + '</span>' : '') + '</td><td class="n">' + k(b) + '</td><td class="n">' + k(a) + '</td><td class="n' + (diff < 0 ? ' neg' : '') + '">' + k(diff) + '</td><td class="n">' + (share === null || !a ? '–' : String(share).replace('.', ',') + ' %') + '</td></tr>';
+    }
+    body += '<tr class="big"><td>Summa</td><td class="n">' + k(tb) + '</td><td class="n">' + k(ta) + '</td><td class="n' + (tbw - ta < 0 ? ' neg' : '') + '">' + k(tbw - ta) + '</td><td></td></tr></table>';
+    body += '<p class="foot">Kvar mot budget och andel av omsättningen räknas bara på veckor där utfallet är ifyllt.' + (missing ? ' Veckor utan utfall räknas som helt använda i plus/minus, precis som i veckobudgeten.' : '') + '</p>';
+    // Avsättningar och saldo
+    body += '<h2>Avsättningar och saldo</h2><table><tr><th>Post</th><th class="n">Belopp</th></tr>'
+      + '<tr><td>Momsreserv (betalas till Skatteverket)</td><td class="n">' + k(sum(w => w.vatReserve)) + '</td></tr>'
+      + '<tr><td>Buffert</td><td class="n">' + k(sum(w => w.buffer)) + '</td></tr>'
+      + '<tr><td>Ingående saldo (första veckan)</td><td class="n">' + k(first.balanceIn) + '</td></tr>'
+      + '<tr><td>Månadens plus/minus</td><td class="n' + (plus < 0 ? ' neg' : '') + '">' + k(plus) + '</td></tr>'
+      + '<tr class="big"><td>Saldo vid månadens slut</td><td class="n">' + k(last.balanceOut) + '</td></tr>'
+      + '<tr><td>Fritt saldo (efter pengar kvar i kostnadspotter)</td><td class="n">' + k(last.free) + '</td></tr></table>';
+    // Vecka för vecka
+    body += '<h2>Vecka för vecka</h2><table><tr><th>Vecka</th><th class="n">Omsättning ex moms</th><th class="n">Kvar efter avsättn.</th><th class="n">Plus/minus</th><th class="n">Saldo efter</th></tr>'
+      + weeks.map(w => '<tr><td>' + esc(weekLabel(w.weekStart)) + (w.computed ? '' : ' <span style="color:#6e6e6e">(ej ifylld)</span>') + '</td><td class="n">' + (w.computed ? k(w.revenueEx) : '–') + '</td><td class="n' + (w.left < 0 ? ' neg' : '') + '">' + (w.computed ? k(w.left) : '–') + '</td><td class="n' + (w.plusMinus < 0 ? ' neg' : '') + '">' + (w.computed ? k(w.plusMinus) : '–') + '</td><td class="n">' + k(w.balanceOut) + '</td></tr>').join('') + '</table>';
+    const notes = weeks.filter(w => w.note).map(w => 'Vecka ' + weekNo(w.weekStart) + ': ' + w.note);
+    if (notes.length) body += '<h2>Anteckningar</h2><p>' + notes.map(esc).join('<br>') + '</p>';
+    body += '<p class="foot">Siffrorna kommer från veckobudgeten i admin. Exempelveckor räknas inte med.</p>';
+    printDoc(title, body, sheetCss);
   }
   const lastBalance = () => { const before = budget.weeks.filter(x => x.weekStart < budWeek); return before.length ? before[before.length - 1].balanceOut : budget.settings.startBalance; };
   function renderBudgetYear() {
