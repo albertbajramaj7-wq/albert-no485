@@ -248,7 +248,7 @@
       <section data-panel="budget" data-finance-panel hidden>
         <div class="finance-lock-banner" data-finance-lock><strong>Endast som referens.</strong> Visas så du kan titta, men går inte att ändra eller spara förrän kassan är flyttad till LAMA AB.</div>
         <div class="section-heading budget-heading"><div><h2 id="bud-title">Veckobudget</h2><p class="muted" id="bud-sub">Samma uträkning som ditt budgetark.</p></div>
-          <div class="budget-nav"><button type="button" id="bud-print" class="admin-primary finance-free">Skriv ut infoblad (PDF)</button><button type="button" id="bud-prev" class="secondary-button">Förra veckan</button><select id="bud-week" aria-label="Välj vecka"></select><button type="button" id="bud-next" class="secondary-button">Nästa vecka</button></div></div>
+          <div class="budget-nav"><button type="button" id="bud-print" class="admin-primary finance-free">Skriv ut infoblad (PDF)</button><button type="button" id="bud-prev" class="secondary-button">Förra veckan</button><select id="bud-week" aria-label="Välj vecka"></select><button type="button" id="bud-next" class="secondary-button">Nästa vecka</button><select id="bud-vatmode" aria-label="Visa belopp"><option value="inkl">Belopp inkl moms</option><option value="ex">Belopp ex moms</option></select></div></div>
         <div id="bud-warnings" class="closed-banner budget-warnings" hidden></div>
         <div class="day-summary key-figures" id="bud-figures"></div>
         <section class="admin-card"><h2>Veckans försäljning</h2>
@@ -269,7 +269,7 @@
           <div class="table-scroll"><table class="data-table budget-table" id="bud-table"></table></div>
           <div class="budget-actions"><button type="button" id="bud-fill-fortnox" class="secondary-button" hidden>Fyll i från Fortnox</button><button type="button" id="bud-save" class="admin-primary">Spara veckan</button></div>
         </section>
-        <section class="admin-card"><div class="section-heading"><h2>Alla veckor</h2><button type="button" id="bud-export" class="text-button">Exportera CSV</button></div>
+        <section class="admin-card"><div class="section-heading"><h2>Alla veckor</h2><div class="budget-nav month-report"><select id="bud-month" aria-label="Välj månad för rapporten"></select><button type="button" id="bud-month-print" class="admin-primary">Månadsrapport (PDF)</button><button type="button" id="bud-export" class="text-button">Exportera CSV</button></div></div>
           <div class="table-scroll"><table class="data-table" id="bud-year"></table></div></section>
         <section class="admin-card" id="fortnox-card"><div class="section-heading"><h2>Fortnox</h2><span id="fx-state" class="muted"></span></div><div id="fx-body"></div></section>
         <details class="admin-card budget-settings" id="bud-settings"><summary>Budgetinställningar</summary><form id="bud-settings-form"><div id="bud-settings-body"></div><div class="budget-actions"><button type="submit" class="admin-primary">Spara inställningar</button></div></form></details>
