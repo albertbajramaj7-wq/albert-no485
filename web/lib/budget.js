@@ -1,7 +1,7 @@
 // Veckobudget – samma uträkning som Albert_NO485_Veckobudget (Google-arket).
 //
 // Omsättning per vecka fördelas på kostnadsposter i procent, fasta månadskostnader
-// läggs undan per vecka (× 12 / 52), kortavgiften uppskattas och hela
+// läggs undan per vecka (försiktigt: månad ÷ 4, eller exakt: × 12 / 52), kortavgiften uppskattas och hela
 // försäljningsmomsen reserveras. Faktiska kostnader (utfall) jämförs med
 // budgeten; över- och underskott förs vidare per post till nästa vecka.
 // Exempelveckor visas men förs inte vidare.
@@ -17,6 +17,7 @@ export const PERCENT_POSTS = [
 
 export const DEFAULT_SETTINGS = Object.freeze({
   reportBasis: 'ex',          // kassarapportens belopp: 'ex' eller 'inkl' moms
+  fixedWeeks: 'four',         // fasta kostnader per vecka: 'four' = månad / 4 (försiktigt), 'year' = månad × 12 / 52 (exakt över året)
   openDays: 5,
   cardShare: 0.95,
   avgCard: 300,
@@ -65,6 +66,7 @@ export function normalizeSettings(input) {
   const d = DEFAULT_SETTINGS;
   const out = {
     reportBasis: s.reportBasis === 'inkl' ? 'inkl' : 'ex',
+    fixedWeeks: s.fixedWeeks === 'year' ? 'year' : 'four',
     openDays: num(s.openDays, 1, 7, 'Öppetdagar ska vara 1–7.', { fallback: d.openDays }),
     cardShare: pct(s.cardShare, 'kortbetalning', d.cardShare),
     avgCard: num(s.avgCard, 1, 100000, 'Ogiltigt snitt per kortköp.', { fallback: d.avgCard }),
@@ -133,10 +135,12 @@ const r2 = n => Math.round(n * 100) / 100;
 
 /** Fasta kostnader: belopp att betala per månad och per vecka. */
 export function fixedCosts(settings) {
+  // Försiktigt: hela månadsbeloppet finns undanlagt efter 4 veckor. Exakt: månad × 12 / 52.
+  const perMonth = settings.fixedWeeks === 'year' ? 52 / 12 : 4;
   return settings.fixed.map(f => {
     if (f.amount === null) return { ...f, monthly: null, weekly: null, weeklyEx: null, missing: true };
     const monthly = f.basis === 'inkl' ? f.amount : f.amount * (1 + f.vat);
-    const weekly = monthly * 12 / 52;
+    const weekly = monthly / perMonth;
     return { ...f, monthly: r2(monthly), weekly, weeklyEx: weekly / (1 + f.vat), missing: false };
   });
 }

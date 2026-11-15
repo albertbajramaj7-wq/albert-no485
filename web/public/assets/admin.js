@@ -1040,6 +1040,9 @@
     let g = group('Försäljning och kalender');
     const basis = el('div'), bl = el('label', 'Kassarapportens belopp'), bs = el('select'); bl.htmlFor = 'bs-reportBasis'; bs.id = 'bs-reportBasis';
     [['ex', 'Exkl moms'], ['inkl', 'Inkl moms']].forEach(([v, t]) => { const o = el('option', t); o.value = v; o.selected = s.reportBasis === v; bs.append(o); }); basis.append(bl, bs); g.append(basis);
+    const fw = el('div'), fwl = el('label', 'Fasta kostnader per vecka'), fws = el('select'); fwl.htmlFor = 'bs-fixedWeeks'; fws.id = 'bs-fixedWeeks';
+    [['four', 'Försiktigt: månad ÷ 4'], ['year', 'Exakt: månad × 12 ÷ 52']].forEach(([v, t]) => { const o = el('option', t); o.value = v; o.selected = (s.fixedWeeks || 'four') === v; fws.append(o); });
+    fw.append(fwl, fws, el('small', 'Försiktigt = hela hyran finns undanlagd efter 4 veckor. Det som blir över i månader med 5 veckor hamnar i potten.', 'field-help')); g.append(fw);
     settingsField(g, 'Öppetdagar per vecka', s.openDays, 'openDays');
     settingsField(g, 'Andel betalning med kort (%)', s.cardShare, 'cardShare', { percent: true });
     settingsField(g, 'Snitt per kortköp inkl moms (kr)', s.avgCard, 'avgCard');
@@ -1084,6 +1087,7 @@
     const s = structuredClone(budget.settings); let bad = '';
     const val = (input, percent) => { const n = parseNum(input.value); if (Number.isNaN(n)) bad = bad || 'Kontrollera siffran i ' + (input.labels?.[0]?.textContent || input.getAttribute('aria-label') || 'ett fält') + '.'; return n === null || Number.isNaN(n) ? null : percent ? Math.round(n * 1000) / 100000 : n; };
     s.reportBasis = $('bs-reportBasis').value;
+    s.fixedWeeks = $('bs-fixedWeeks').value;
     document.querySelectorAll('#bud-settings-body input[data-path]').forEach(i => { const v = val(i, i.dataset.percent === '1'); const [a, b] = i.dataset.path.split('.'); if (b) s[a][b] = v ?? 0; else s[a] = v ?? 0; });
     s.fixed = [...document.querySelectorAll('.budget-fixed tbody tr')].map(tr => ({ key: tr.dataset.key || undefined, name: tr.querySelector('.fx-name').value.trim(), amount: val(tr.querySelector('.fx-amount')), basis: tr.querySelector('.fx-basis').value, vat: (val(tr.querySelector('.fx-vat')) ?? 0) / 100 }));
     const mixRows = cls => [...document.querySelectorAll('.' + cls + ' tbody tr')].map(tr => { const r = {}; tr.querySelectorAll('input').forEach(i => { r[i.dataset.k] = i.dataset.kind ? (val(i, i.dataset.kind === 'pct') ?? 0) : i.value; }); return r; });
