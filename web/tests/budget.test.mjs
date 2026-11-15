@@ -17,7 +17,7 @@ const settings = {
 };
 
 test('uträkningen följer arkets regler', () => {
-  const r = computeBudget(settings, [
+  const r = computeBudget({ ...settings, fixedWeeks: 'year' }, [
     { weekStart: '2026-10-05', kind: 'actual', revenue: 40000, actuals: {} },
     { weekStart: '2026-10-12', kind: 'actual', revenue: 30000, actuals: { goods: 7000, rent: 3000 } },
     { weekStart: '2026-09-28', kind: 'example', revenue: 99999, actuals: {} },
@@ -91,4 +91,13 @@ test('dricks sätts undan och påverkar inte budgeten eller saldot', async () =>
   assert.equal(w1.left, w0.left);
   assert.equal(w1.balanceOut, w0.balanceOut);
   assert.equal((await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-02', revenue: 1000, tips: -5 } }, { token: owner })).status, 400);
+});
+
+test('fasta kostnader: försiktigt = månad / 4, exakt = månad × 12 / 52', () => {
+  const four = computeBudget(settings, [{ weekStart: '2026-11-02', kind: 'actual', revenue: 30000, actuals: {} }]);
+  const year = computeBudget({ ...settings, fixedWeeks: 'year' }, [{ weekStart: '2026-11-02', kind: 'actual', revenue: 30000, actuals: {} }]);
+  const rent = r => r.weeks[0].posts.find(p => p.key === 'rent').budget;
+  assert.equal(four.settings.fixedWeeks, 'four');          // standard är försiktigt
+  assert.equal(rent(four), 3250);                           // 13 000 / 4
+  assert.equal(rent(year), 3000);                           // 13 000 × 12 / 52
 });
