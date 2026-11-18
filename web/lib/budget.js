@@ -60,6 +60,18 @@ function num(v, min, max, message, { nullable = false, fallback } = {}) {
 function text(v, max, fallback = '') { return typeof v === 'string' ? v.trim().slice(0, max) : fallback; }
 const pct = (v, label, fallback) => num(v, 0, 1, 'Ogiltig procentsats för ' + label + '.', { fallback });
 
+/** Omfördelningar: [{ from, to, amount }], to = postnyckel eller 'free' (fritt saldo). */
+export function normalizeTransfers(list) {
+  if (list === null || list === undefined) return [];
+  if (!Array.isArray(list) || list.length > 30) throw new BudgetError('Ogiltiga omfördelningar.');
+  return list.map(t => {
+    const from = String(t?.from || ''), to = String(t?.to || '');
+    if (!/^[a-z0-9_]{1,40}$/.test(from) || !/^[a-z0-9_]{1,40}$/.test(to) || from === to || from === 'free') throw new BudgetError('Ogiltig omfördelning.');
+    const amt = num(t?.amount, 0.01, 100000000, 'Beloppet att flytta måste vara större än 0.');
+    return { from, to, amount: Math.round(amt * 100) / 100 };
+  });
+}
+
 /** Tvättar och kontrollerar inställningar. Saknade fält får standardvärden. */
 export function normalizeSettings(input) {
   const s = input && typeof input === 'object' ? input : {};
@@ -118,6 +130,7 @@ export function normalizeWeek(w, settings) {
     cardAmount: amount(w.cardAmount, 'kortbelopp'),
     cardCount: w.cardCount === null || w.cardCount === undefined || w.cardCount === '' ? null : Math.round(num(w.cardCount, 0, 1000000, 'Ogiltigt antal kortköp.')),
     tips: amount(w.tips, 'dricks'),
+    transfers: normalizeTransfers(w.transfers),
     note: text(w.note, 300),
     actuals,
   };
@@ -197,6 +210,21 @@ export function computeBudget(settingsInput, weeksInput, received = {}) {
       p.available = p.in + p.budget;
       if (p.actual === null) { p.out = p.in; p.status = 'Utfall saknas'; used += p.budget; }
       else { p.out = p.available - p.actual; p.status = p.out >= 0 ? 'Inom budget' : 'Över budget'; used += p.actual; }
+    }
+    // Omfördelning: överskott i en post flyttas till en annan post eller till fritt saldo.
+    // Man kan bara flytta det som faktiskt finns kvar i posten (inte mer än överskottet).
+    const transfers = [];
+    for (const t of w.transfers || []) {
+      const from = posts.find(p => p.key === t.from), to = t.to === 'free' ? null : posts.find(p => p.key === t.to);
+      if (!from || (t.to !== 'free' && !to)) continue;
+      const amount = Math.min(t.amount, Math.max(0, from.out));
+      if (amount <= 0) continue;
+      from.out -= amount; from.moved = (from.moved || 0) - amount;
+      if (to) { to.out += amount; to.moved = (to.moved || 0) + amount; }
+      transfers.push({ from: t.from, to: t.to, amount: r2(amount), requested: t.amount });
+    }
+    for (const p of posts) {
+      if (p.moved && p.actual !== null) p.status = p.out >= 0 ? (p.moved > 0 ? 'Täckt genom omfördelning' : 'Inom budget') : 'Över budget';
       if (!example) carry[p.key] = p.out;
     }
     const buffer = revEx * s.pct.buffer;
@@ -209,13 +237,13 @@ export function computeBudget(settingsInput, weeksInput, received = {}) {
     const balanceOut = example ? balance : balance + plusMinus;
     if (!example) balance = balanceOut;
     const goodsActual = w.actuals?.goods;
-    const round = p => ({ ...p, ex: r2(p.ex), vat: r2(p.vat), budget: r2(p.budget), in: r2(p.in), available: r2(p.available), out: r2(p.out) });
+    const round = p => ({ ...p, ex: r2(p.ex), vat: r2(p.vat), budget: r2(p.budget), in: r2(p.in), available: r2(p.available), out: r2(p.out), moved: p.moved ? r2(p.moved) : 0 });
     return {
       ...base, computed: true,
       status: example ? 'Exempel, förs inte vidare' : posts.some(p => p.actual === null) ? 'Utfall saknas för vissa poster' : 'Klar',
       revenueEx: r2(revEx), salesVat: r2(salesVat), salesInkl: r2(salesInkl),
       perOpenDay: r2(revEx / s.openDays), cardAmount: r2(cardAmount), cardCount,
-      posts: posts.map(round), buffer: r2(buffer), vatReserve: r2(salesVat), tips: r2(tips),
+      posts: posts.map(round), transfers, buffer: r2(buffer), vatReserve: r2(salesVat), tips: r2(tips),
       purchaseVat: r2(posts.reduce((n, p) => n + (p.key === 'staff' ? 0 : p.vat), 0)),
       reserve: r2(reserve), left: r2(left), plusMinus: r2(plusMinus),
       goodsPct: goodsActual === undefined || !revEx ? null : r2(goodsActual / (1 + s.purchaseVat.goods) / revEx * 100),

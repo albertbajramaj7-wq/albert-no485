@@ -884,7 +884,47 @@
     table.append(body);
     $('bud-fill-fortnox').hidden = !Object.keys(sug).length;
     $('bud-print').disabled = false;
+    renderTransfers(w);
     renderBudgetYear(); renderBudgetSettings(); renderFortnox(); renderMonthPicker();
+  }
+
+  // Omfördela överskott: från en post med pengar kvar till en annan post eller till fritt saldo.
+  const transferList = w => (w?.transfers || []).map(t => ({ from: t.from, to: t.to, amount: t.requested ?? t.amount }));
+  function renderTransfers(w) {
+    const root = $('bud-transfers'); root.replaceChildren();
+    root.hidden = !w?.computed || w.kind === 'example';
+    if (root.hidden) return;
+    const name = key => key === 'free' ? 'Fritt saldo' : (w.posts.find(p => p.key === key)?.name || key);
+    root.append(el('h3', 'Omfördela överskott'), el('p', 'Har en post pengar kvar kan du flytta dem till en post som gått över budget, eller till fritt saldo. Beloppen är inklusive moms.', 'muted'));
+    (w.transfers || []).forEach((t, i) => {
+      const row = el('div', undefined, 'transfer-row');
+      row.append(el('span', name(t.from) + ' till ' + name(t.to)), el('strong', krd(t.amount)));
+      const undo = el('button', 'Ångra', 'text-button'); undo.type = 'button';
+      undo.addEventListener('click', () => { const list = transferList(w); list.splice(i, 1); saveBudgetWeek(list, 'Omfördelningen är ångrad.'); });
+      row.append(undo); root.append(row);
+    });
+    const sources = w.posts.filter(p => p.out > 0.005);
+    if (!sources.length) { root.append(el('p', 'Ingen post har pengar kvar att flytta just nu. Fyll i Faktiskt använt så syns överskottet.', 'field-help')); return; }
+    const form = el('div', undefined, 'transfer-form');
+    const from = el('select'); from.setAttribute('aria-label', 'Flytta från');
+    sources.forEach(p => { const o = el('option', p.name + ' (' + krd(p.out) + ' kvar)'); o.value = p.key; from.append(o); });
+    const to = el('select'); to.setAttribute('aria-label', 'Flytta till');
+    const fill = () => { to.replaceChildren(); const f = el('option', 'Fritt saldo'); f.value = 'free'; to.append(f);
+      w.posts.filter(p => p.key !== from.value).sort((a, b) => a.out - b.out).forEach(p => { const o = el('option', p.name + (p.out < 0 ? ' (' + krd(-p.out) + ' över budget)' : '')); o.value = p.key; to.append(o); });
+      const neg = w.posts.find(p => p.key !== from.value && p.out < 0); if (neg) to.value = neg.key;
+      const src = w.posts.find(p => p.key === from.value); amount.value = fmtInput(Math.round(Math.min(src.out, neg ? -neg.out : src.out) * 100) / 100); };
+    const amount = el('input'); amount.inputMode = 'decimal'; amount.setAttribute('aria-label', 'Belopp att flytta');
+    from.addEventListener('change', fill); fill();
+    const go = el('button', 'Flytta', 'admin-primary'); go.type = 'button';
+    go.addEventListener('click', () => {
+      const n = parseNum(amount.value), src = w.posts.find(p => p.key === from.value);
+      if (!n || Number.isNaN(n) || n <= 0) { note('Ange ett belopp större än 0.'); return; }
+      if (n > src.out + 0.005) { note('Du kan flytta högst ' + krd(src.out) + ' från ' + src.name + '.'); return; }
+      saveBudgetWeek([...transferList(w), { from: from.value, to: to.value, amount: n }], krd(n) + ' flyttat från ' + src.name + ' till ' + name(to.value) + '.');
+    });
+    const lab = (t, c) => { const d = el('div'); d.append(el('label', t), c); return d; };
+    form.append(lab('Från', from), lab('Till', to), lab('Belopp (kr)', amount), go);
+    root.append(form);
   }
 
   const sheetCss = 'body{font:13px/1.5 "Helvetica Neue",Arial,sans-serif;color:#111;margin:40px 44px;max-width:760px}'
@@ -1095,14 +1135,15 @@
     if (bad) { note(bad); return null; }
     return s;
   }
-  async function saveBudgetWeek() {
+  async function saveBudgetWeek(transfersOverride, message) {
     const nums = { revenue: parseNum($('bud-revenue').value), salesVat: parseNum($('bud-vat').value), cardAmount: parseNum($('bud-card').value), cardCount: parseNum($('bud-cardcount').value), tips: parseNum($('bud-tips').value) };
     if (Object.values(nums).some(Number.isNaN)) { note('Kontrollera siffrorna. Använd bara siffror, gärna med komma för ören.'); return; }
     const actuals = {}; let bad = false;
     const wNow = budgetPreview();
     document.querySelectorAll('.budget-actual').forEach(i => { const n = parseNum(i.value); if (Number.isNaN(n)) bad = true; else if (n !== null) actuals[i.dataset.key] = budVatMode() === 'ex' ? Math.round(n * (1 + postRate(wNow, i.dataset.key)) * 100) / 100 : n; });
     if (bad) { note('Kontrollera beloppen under Faktiskt använt.'); return; }
-    const r = await adminCall('budget', { action: 'save_week', week: { weekStart: budWeek, kind: $('bud-kind').value, note: $('bud-note').value, ...nums, actuals } }, weekLabel(budWeek) + ' är sparad.');
+    const transfers = Array.isArray(transfersOverride) ? transfersOverride : transferList(budgetPreview());
+    const r = await adminCall('budget', { action: 'save_week', week: { weekStart: budWeek, kind: $('bud-kind').value, note: $('bud-note').value, ...nums, actuals, transfers } }, message || weekLabel(budWeek) + ' är sparad.');
     if (r) { budget = r; renderBudget(); }
   }
   $('bud-save').addEventListener('click', saveBudgetWeek);
