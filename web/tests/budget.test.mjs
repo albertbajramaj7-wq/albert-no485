@@ -1,7 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup } from './helpers.mjs';
-import { computeBudget, isoWeek } from '../lib/budget.js';
+import { computeBudget, isoWeek, normalizeTransfers } from '../lib/budget.js';
 
 // Påhittade siffror – inga riktiga belopp i koden.
 const settings = {
@@ -100,4 +100,35 @@ test('fasta kostnader: försiktigt = månad / 4, exakt = månad × 12 / 52', () 
   assert.equal(four.settings.fixedWeeks, 'four');          // standard är försiktigt
   assert.equal(rent(four), 3250);                           // 13 000 / 4
   assert.equal(rent(year), 3000);                           // 13 000 × 12 / 52
+});
+
+test('överskott kan flyttas till en annan post eller till fritt saldo', () => {
+  const week = transfers => ({ weekStart: '2026-11-02', kind: 'actual', revenue: 30000, actuals: { fuel: 500, goods: 8700 }, transfers });
+  const base = computeBudget(settings, [week([])]).weeks[0];
+  const p = (w, k) => w.posts.find(x => x.key === k);
+  const fuelLeft = p(base, 'fuel').out, goodsOver = -p(base, 'goods').out;
+  assert.ok(fuelLeft > 0 && goodsOver > 0, 'drivmedel ska ha överskott och varuinköp gå över');
+  // Flytta till varuinköp: varuinköp täcks, drivmedel minskar, saldot är detsamma
+  const moved = computeBudget(settings, [week([{ from: 'fuel', to: 'goods', amount: goodsOver }])]).weeks[0];
+  assert.equal(p(moved, 'goods').out, 0);
+  assert.equal(p(moved, 'goods').status, 'Täckt genom omfördelning');
+  assert.equal(p(moved, 'fuel').out, Math.round((fuelLeft - goodsOver) * 100) / 100);
+  assert.equal(moved.balanceOut, base.balanceOut);
+  // Flytta till fritt saldo: fritt saldo ökar lika mycket
+  const free = computeBudget(settings, [week([{ from: 'fuel', to: 'free', amount: 100 }])]).weeks[0];
+  assert.equal(Math.round((free.free - base.free) * 100) / 100, 100);
+  // Man kan inte flytta mer än som finns kvar
+  const tooMuch = computeBudget(settings, [week([{ from: 'fuel', to: 'free', amount: 999999 }])]).weeks[0];
+  assert.equal(tooMuch.transfers[0].amount, fuelLeft);
+  assert.equal(p(tooMuch, 'fuel').out, 0);
+  assert.throws(() => normalizeTransfers([{ from: 'free', to: 'goods', amount: 5 }]));
+  assert.throws(() => normalizeTransfers([{ from: 'fuel', to: 'fuel', amount: 5 }]));
+});
+
+test('omfördelningar sparas med veckan', async () => {
+  const r = await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-09', revenue: 30000, actuals: { fuel: 500 }, transfers: [{ from: 'fuel', to: 'free', amount: 200 }] } }, { token: owner });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const w = r.body.weeks.find(x => x.weekStart === '2026-11-09');
+  assert.deepEqual(w.transfers.map(x => [x.from, x.to, x.amount]), [['fuel', 'free', 200]]);
+  assert.equal((await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-09', revenue: 30000, transfers: [{ from: 'fuel', to: 'free', amount: -5 }] } }, { token: owner })).status, 400);
 });
