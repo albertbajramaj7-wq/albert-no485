@@ -7,11 +7,14 @@ basecss=re.search(r'<style>(.*?)</style>',home,re.S).group(1)
 shared_js=(SRC/'site.js').read_text()
 (DIST/'assets/site.js').write_text(shared_js)
 (DIST/'assets').mkdir(parents=True,exist_ok=True)
-for name in ['admin.css','admin.js','booking.js']:
+for name in ['admin.css','admin.js','booking.js','tavling.js','tavling-admin.js']:
  (DIST/'assets'/name).write_text((SRC/name).read_text())
 admin_folder=DIST/'admin';admin_folder.mkdir(exist_ok=True)
 (admin_folder/'index.html').write_text((SRC/'admin.html').read_text())
 (admin_folder/'manifest.webmanifest').write_text((SRC/'admin.webmanifest').read_text())
+# Admin för tävlingslistan är en egen liten sida, så att den stora adminen inte behöver ändras.
+(admin_folder/'tavling').mkdir(exist_ok=True)
+(admin_folder/'tavling'/'index.html').write_text((SRC/'tavling-admin.html').read_text())
 
 def links(s):
  for a,b in [('https://www.albertno485.com/meny','/meny/'),('https://www.albertno485.com/historien','/historien/'),('https://www.albertno485.com/avpn','/avpn/'),('https://www.albertno485.com/boka-pizza','/boka-pizza/')]:s=s.replace(a,b)
@@ -79,6 +82,12 @@ legal += sec('Vem får ta del av uppgifterna?', '<p>Bara vi som arbetar i restau
 legal += sec('Dina rättigheter', '<p>Du har rätt att få veta vilka uppgifter vi har om dig, att få fel rättade och att få dina uppgifter raderade i förtid. Du kan också invända mot behandlingen. Ring oss på 0340–827 75 så hjälper vi dig.</p><p>Tycker du att vi hanterar dina uppgifter fel kan du lämna klagomål till <a href="https://www.imy.se" rel="noopener">Integritetsskyddsmyndigheten (IMY)</a>.</p>')
 legal += '</div></section>'
 render('integritet','Integritetspolicy','Så hanterar Albert NO.485 dina personuppgifter när du bokar: vad vi sparar, varför, hur länge och dina rättigheter.',legal,'legal-page')
+
+# Tävling: deltagarlistan hämtas från /api/giveaway. Namnen ligger i databasen, aldrig i koden.
+# Sidan ska inte indexeras av sökmotorer (noindex), eftersom den visar Instagram-namn.
+tavling=f'<section class="page-intro giveaway-intro"><div class="container">{crumb("Tävling")}<div class="small">Tävling · Ett år med napolitansk pizza</div><h1 class="page-title">Vinn en PS5<br><em>och GTA 6.</em></h1><p class="page-lead">Vi firar ett år med napolitansk pizza och lottar ut en PlayStation 5 och GTA 6. Här ser du alla som är med. Sök på ditt Instagram-namn och se om allt är avklarat eller vad som är kvar att göra. Vi snurrar hjulet den 7 december.</p></div></section>'
+tavling+='''<section class="giveaway"><div class="container giveaway-grid"><div class="giveaway-how"><div class="small">Så är du med</div><ol><li>Gilla tävlingsinlägget på Instagram.</li><li>Dela det i din story och tagga @albert_no.485.</li><li>Tagga en vän i kommentarerna.</li><li>Följ oss på Instagram.</li></ol><p>Har du privat konto? Skicka en skärmdump av din story till oss i ett meddelande på Instagram.</p><div class="small giveaway-double-title">Dubbla din chans</div><p>Köp en pizza hos oss före dragningen och skicka en bild på kvittot till oss i ett meddelande på Instagram. Mer än så behövs inte. Då får du två namn på hjulet.</p><a class="arrow-link" href="https://www.instagram.com/albert_no.485/" target="_blank" rel="noopener">Till vår Instagram</a><div class="giveaway-legend"><p><span class="giveaway-mark is-ok">Avklarat</span><span>Du är med i dragningen.</span></p><p><span class="giveaway-mark is-double">Dubbel chans</span><span>Du är med och har två namn på hjulet.</span></p><p><span class="giveaway-mark is-missing">Ej avklarat</span><span>Under ditt namn står vad som är kvar att göra. När det är gjort uppdaterar vi listan.</span></p></div></div><div class="giveaway-panel"><form class="giveaway-search" role="search"><label for="giveaway-search">Sök ditt Instagram-namn</label><input type="search" id="giveaway-search" placeholder="ditt_namn" autocomplete="off" autocapitalize="none" spellcheck="false"></form><div id="giveaway-tools" hidden><div class="giveaway-filters" role="group" aria-label="Visa deltagare"><button type="button" data-giveaway-filter="all" aria-pressed="true">Alla</button><button type="button" data-giveaway-filter="ok" aria-pressed="false">Avklarat</button><button type="button" data-giveaway-filter="double" aria-pressed="false">Dubbel chans</button><button type="button" data-giveaway-filter="missing" aria-pressed="false">Ej avklarat</button></div><p class="giveaway-summary" id="giveaway-summary"></p></div><p class="giveaway-status" id="giveaway-status" role="status">Hämtar listan.</p><ul class="giveaway-list" id="giveaway-list"></ul><p class="giveaway-note">Listan visar Instagram-namn på dem som har kommenterat tävlingsinlägget och uppdateras en gång om dagen. Vill du inte stå med? Skriv till oss på Instagram, så tar vi bort ditt namn.</p></div></div></section>'''
+render('tavling','Tävling: vinn en PS5 och GTA 6','Se alla som är med i utlottningen av en PS5 och GTA 6 hos Albert NO.485. Sök ditt Instagram-namn och se om allt är avklarat eller vad som är kvar.',tavling,'giveaway-page',scripts='<meta name="robots" content="noindex"><script src="/assets/tavling.js" defer></script>')
 
 # Keep the approved homepage; route every complete page within the new site.
 h=links(home)

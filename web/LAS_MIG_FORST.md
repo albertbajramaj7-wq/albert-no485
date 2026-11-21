@@ -126,6 +126,24 @@ Banken hämtas automatiskt varje natt och med knappen "Hämta från banken". Var
 
 Obs: när du ställer en bankfråga till AI-assistenten skickas sammanställd bankdata (belopp, motparter, kategorier) till Anthropic för att besvara frågan. Assistenten kan bara läsa. Bankbehörigheten tas automatiskt bort om en person byter roll eller inaktiveras.
 
+## Tävling (deltagarlista på hemsidan)
+
+Sidan `/tavling/` visar alla som är med i Instagram-tävlingen: Instagram-namn och **Avklarat** (grönt),
+**Dubbel chans** (gult) eller **Ej avklarat** (rött). Under ett rött namn står vad som är kvar att göra:
+dela i story, tagga en vän eller följa. Besökaren kan söka sitt namn.
+
+1. Kör `supabase/migrations/0016_tavling.sql` i Supabase.
+2. Admin → **Tävling** (`/admin/tavling/`): tryck på en status för att byta mellan Avklarat och Ej avklarat eller
+   mellan enkel och dubbel chans, lägg till ett namn eller ta bort ett. Personal kan läsa listan,
+   administratörer och ägare kan ändra.
+3. Listan syns först när ni trycker **Visa listan**. **Dölj listan** stänger av den igen, till exempel efter dragningen.
+
+- Namnen ligger bara i databasen, aldrig i koden (GitHub-projektet är öppet).
+- **Ta bort** döljer namnet och raderar ingenting. Ett borttaget namn läggs inte tillbaka automatiskt.
+- Den automatiska uppdateringen (`api_giveaway_sync`, anropas direkt mot databasen) lägger till nya namn och
+  ändrar status och dubbel chans, men rör aldrig det ni har ändrat för hand.
+- Sidan har `noindex`, så sökmotorer ska inte lista namnen, och den länkas inte från menyn.
+
 ## För utvecklare
 - Testerna kräver en lokal Postgres (`psql` i PATH): `PGHOST=... PGPORT=... PGUSER=... npm test`
 - Lokal förhandsvisning med låtsas-inloggning: `node tests/dev-server.mjs`, öppna http://localhost:8787

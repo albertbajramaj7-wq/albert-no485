@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#46302a"><meta name="robots" content="noindex,nofollow">
+  <title>Tävling | Admin | Albert NO.485</title>
+  <link rel="stylesheet" href="/assets/site.css">
+  <style>
+    body.giveaway-admin{background:var(--cream);color:var(--ink)}
+    .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);border:0}
+    .ga-top{background:var(--ink);color:var(--cream);padding:18px 0}
+    .ga-top .container{display:flex;justify-content:space-between;align-items:center;gap:20px;font-size:12px}
+    .ga-top a{text-decoration:underline;text-underline-offset:4px}
+    .ga-main{padding:40px 0 90px;max-width:860px}
+    .ga-main h1{font-family:var(--serif);font-weight:400;font-size:44px;letter-spacing:-1.5px;margin:0 0 10px}
+    .ga-main p{font-size:14px;max-width:620px}
+    .ga-notice{padding:14px 16px;border:1px solid var(--line);background:#fff8;font-size:13px;margin:18px 0}
+    .ga-notice.error{border-color:#9c2f22;color:#7c2419}
+    .ga-card{border:1px solid var(--line);padding:22px;margin:22px 0;background:#fff6}
+    .ga-card h2{font-size:11px;letter-spacing:1.5px;text-transform:uppercase;margin:0 0 14px}
+    .ga-row{display:flex;gap:12px;flex-wrap:wrap;align-items:center}
+    .ga-row input[type=text],.ga-row input[type=search],.ga-row select{flex:1 1 220px;min-height:46px;padding:10px 14px;border:1px solid var(--line);border-radius:2px;background:#fff;font:inherit;font-size:15px;color:var(--ink)}
+    .ga-btn{min-height:46px;padding:10px 18px;border:1px solid var(--ink);border-radius:2px;background:var(--ink);color:var(--cream);font-size:12px;font-weight:700}
+    .ga-btn.light{background:none;color:var(--ink)}
+    .ga-btn:disabled{opacity:.5;cursor:default}
+    .ga-count{font-size:13px;margin:14px 0}
+    .ga-list{list-style:none;margin:0;padding:0;border-top:1px solid var(--line)}
+    .ga-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
+    .ga-name{font-size:15px;word-break:break-all}
+    .ga-name small{display:block;font-size:11px;color:#6a6d60}
+    .ga-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+    .ga-state{min-height:40px;min-width:118px;padding:8px 14px;border-radius:2px;border:1px solid;font-size:12px;font-weight:700}
+    .ga-state.ok{background:#dfe9d8;border-color:#2f6b3f;color:#234f2f}
+    .ga-state.missing{background:#f3dcd5;border-color:#9c2f22;color:#7c2419}
+    .ga-state.double{background:#ecc558;border-color:#9a7213;color:#3a2a04}
+    .ga-state.single{background:none;border-color:var(--line);color:#5b5f52;font-weight:400}
+    .ga-small{min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:2px;background:none;font-size:12px}
+    .ga-hidden-row .ga-name{color:#6a6d60;text-decoration:line-through}
+    @media (max-width:600px){.ga-main h1{font-size:34px}.ga-list li{align-items:flex-start;flex-direction:column}}
+  </style>
+  <script src="/assets/tavling-admin.js" defer></script>
+</head>
+<body class="giveaway-admin">
+  <div class="ga-top"><div class="container"><a href="/admin/">Tillbaka till admin</a><a href="/tavling/" target="_blank" rel="noopener">Öppna sidan på hemsidan</a></div></div>
+  <main class="container ga-main" id="main">
+    <h1>Tävling</h1>
+    <p>Här styr ni listan på hemsidan. Tryck på en status för att byta mellan Avklarat och Ej avklarat, eller mellan enkel och dubbel chans. Listan fylls på automatiskt en gång om dagen, men det ni ändrar för hand skrivs aldrig över.</p>
+    <div id="ga-notice" class="ga-notice" role="status" hidden></div>
+    <div id="ga-content" hidden>
+      <section class="ga-card">
+        <h2>Visas på hemsidan</h2>
+        <div class="ga-row"><span id="ga-published-text"></span><button type="button" class="ga-btn light" id="ga-publish"></button></div>
+      </section>
+      <section class="ga-card">
+        <h2>Lägg till ett namn</h2>
+        <form id="ga-add" class="ga-row" novalidate>
+          <label class="sr-only" for="ga-add-name">Instagram-namn</label><input type="text" id="ga-add-name" placeholder="Instagram-namn" autocomplete="off" autocapitalize="none" spellcheck="false" maxlength="31">
+          <label class="sr-only" for="ga-add-state">Status</label><select id="ga-add-state"><option value="ok">Avklarat</option><option value="missing">Ej avklarat</option></select>
+          <button type="submit" class="ga-btn">Lägg till</button>
+        </form>
+      </section>
+      <section class="ga-card">
+        <h2>Deltagare</h2>
+        <div class="ga-row">
+          <label class="sr-only" for="ga-search">Sök namn</label><input type="search" id="ga-search" placeholder="Sök namn" autocomplete="off" autocapitalize="none" spellcheck="false">
+          <label class="sr-only" for="ga-filter">Visa</label><select id="ga-filter"><option value="all">Alla</option><option value="ok">Avklarat</option><option value="missing">Ej avklarat</option><option value="double">Dubbel chans</option><option value="manual">Ändrade för hand</option><option value="hidden">Borttagna</option></select>
+        </div>
+        <p class="ga-count" id="ga-count"></p>
+        <ul class="ga-list" id="ga-list"></ul>
+      </section>
+    </div>
+  </main>
+</body>
+</html>
