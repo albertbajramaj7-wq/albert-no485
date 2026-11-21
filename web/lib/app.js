@@ -112,7 +112,7 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
         return response;
       }
       if (path === '/api/giveaway' && method === 'GET') {
-        // Tävlingslistan på /tavling/: bara Instagram-namn och status, och bara när den är påslagen i admin.
+        // Tävlingslistan på /tavling/: Instagram-namn, status och vad som är kvar att göra. Bara när den är påslagen i admin.
         const response = json(await rpc('api_giveaway', {}));
         response.headers.set('Cache-Control', 'public, max-age=60');
         return response;
@@ -311,8 +311,8 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
       if (path === '/api/admin/giveaway') {
         // Tävlingslistan. Behörigheten kontrolleras i databasen: personal får läsa, administratörer ändra.
         if (method === 'GET') return reply(await rpc('api_admin_giveaway', { actor, action: 'list' }));
-        if (!['add', 'set', 'remove', 'restore', 'publish'].includes(input.action)) throw new AppError(400, 'Okänd åtgärd.');
-        return reply(await rpc('api_admin_giveaway', { actor, action: input.action, username: input.username, approved: input.approved, published: input.published }));
+        if (!['add', 'set', 'double', 'remove', 'restore', 'publish'].includes(input.action)) throw new AppError(400, 'Okänd åtgärd.');
+        return reply(await rpc('api_admin_giveaway', { actor, action: input.action, username: input.username, approved: input.approved, double: input.double, published: input.published }));
       }
       if (path === '/api/admin/menu') return reply(await rpc('api_admin_menu', method === 'GET' ? { actor } : { actor, action: 'save', item: input.item }));
       if (path === '/api/admin/config') return reply(await rpc('api_admin_settings', method === 'GET' ? { actor, action: 'get' } : { ...input, actor }));

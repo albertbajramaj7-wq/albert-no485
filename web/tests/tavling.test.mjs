@@ -20,7 +20,7 @@ const admin = (body, token = owner) => t.call('POST', '/api/admin/giveaway', bod
 const publicList = async () => (await t.call('GET', '/api/giveaway')).body;
 
 test('listan är dold tills den slås på, och visar då bara namn och status', async () => {
-  const added = await sync([{ u: 'Anna.A', ok: true }, { u: '@bertil_b', ok: false }]);
+  const added = await sync([{ u: 'Anna.A', miss: [] }, { u: '@bertil_b', miss: ['story', 'follow'] }]);
   assert.deepEqual({ added: added.added, total: added.total }, { added: 2, total: 2 });
 
   let list = await publicList();
@@ -33,7 +33,7 @@ test('listan är dold tills den slås på, och visar då bara namn och status', 
   assert.equal(response.headers.get('cache-control'), 'public, max-age=60');
   list = response.body;
   assert.equal(list.published, true);
-  assert.deepEqual(list.entries, [{ u: 'anna.a', ok: true }, { u: 'bertil_b', ok: false }]);
+  assert.deepEqual(list.entries, [{ u: 'anna.a', ok: true, miss: [], x2: false }, { u: 'bertil_b', ok: false, miss: ['follow', 'story'], x2: false }]);
   assert.ok(list.updatedAt);
 });
 
@@ -53,11 +53,30 @@ test('ändringar för hand skrivs inte över av den automatiska uppdateringen', 
   const set = await admin({ action: 'set', username: '@Bertil_B', approved: true });
   assert.equal(set.status, 200, JSON.stringify(set.body));
   const row = set.body.entries.find(e => e.u === 'bertil_b');
-  assert.deepEqual({ ok: row.ok, manual: row.manual, by: row.updatedBy }, { ok: true, manual: true, by: 'Albert' });
+  assert.deepEqual({ ok: row.ok, miss: row.miss, manual: row.manual, by: row.updatedBy }, { ok: true, miss: [], manual: true, by: 'Albert' });
 
-  const result = await sync([{ u: 'bertil_b', ok: false }, { u: 'anna.a', ok: false }, { u: 'cecilia', ok: true }]);
+  const result = await sync([{ u: 'bertil_b', miss: ['story'] }, { u: 'anna.a', miss: ['tag'] }, { u: 'cecilia', miss: [] }]);
   assert.deepEqual(result, { added: 1, changed: 1, total: 3 });
-  assert.deepEqual((await publicList()).entries, [{ u: 'anna.a', ok: false }, { u: 'bertil_b', ok: true }, { u: 'cecilia', ok: true }]);
+  assert.deepEqual((await publicList()).entries, [{ u: 'anna.a', ok: false, miss: ['tag'], x2: false }, { u: 'bertil_b', ok: true, miss: [], x2: false }, { u: 'cecilia', ok: true, miss: [], x2: false }]);
+});
+
+test('dubbel chans: automatiskt från kvitto, och för hand utan att låsa statusen', async () => {
+  // Automatiskt: anna får dubbel chans och blir samtidigt avklarad.
+  assert.deepEqual(await sync([{ u: 'anna.a', miss: [], x2: true }]), { added: 0, changed: 1, total: 3 });
+  let anna = (await publicList()).entries.find(e => e.u === 'anna.a');
+  assert.deepEqual(anna, { u: 'anna.a', ok: true, miss: [], x2: true });
+
+  // För hand: cecilia får dubbel chans i admin. Statusen följer fortfarande den automatiska uppdateringen.
+  const set = await admin({ action: 'double', username: 'cecilia', double: true });
+  assert.equal(set.status, 200, JSON.stringify(set.body));
+  const row = set.body.entries.find(e => e.u === 'cecilia');
+  assert.deepEqual({ x2: row.x2, x2manual: row.x2manual, manual: row.manual }, { x2: true, x2manual: true, manual: false });
+  assert.deepEqual(await sync([{ u: 'cecilia', miss: ['follow'], x2: false }]), { added: 0, changed: 1, total: 3 });
+  let cecilia = (await publicList()).entries.find(e => e.u === 'cecilia');
+  assert.deepEqual(cecilia, { u: 'cecilia', ok: false, miss: ['follow'], x2: true }); // dubbel chans ligger kvar
+  await sync([{ u: 'cecilia', miss: [] }]);
+  assert.equal((await admin({ action: 'double', username: 'cecilia', double: 'ja' })).status, 400);
+  assert.equal((await admin({ action: 'double', username: 'cecilia', double: false }, staff)).status, 403);
 });
 
 test('ta bort döljer namnet utan att radera, och det läggs inte tillbaka automatiskt', async () => {
@@ -66,7 +85,7 @@ test('ta bort döljer namnet utan att radera, och det läggs inte tillbaka autom
   assert.equal(removed.body.entries.find(e => e.u === 'cecilia').hidden, true);
   assert.deepEqual((await publicList()).entries.map(e => e.u), ['anna.a', 'bertil_b']);
 
-  const again = await sync([{ u: 'cecilia', ok: true }]);
+  const again = await sync([{ u: 'cecilia', miss: [], x2: true }]);
   assert.deepEqual(again, { added: 0, changed: 0, total: 2 });
   assert.deepEqual((await publicList()).entries.map(e => e.u), ['anna.a', 'bertil_b']);
   assert.equal(sql(t.db, "select count(*) from giveaway_entries where username = 'cecilia'"), '1');
@@ -86,7 +105,9 @@ test('lägga till för hand, och ogiltiga värden stoppas', async () => {
   assert.equal((await admin({ action: 'set', username: 'finns_inte', approved: true })).status, 404);
   assert.equal((await admin({ action: 'set', username: 'david.d', approved: 'ja' })).status, 400);
   assert.equal((await admin({ action: 'radera_allt' })).status, 400);
-  await assert.rejects(sync([{ u: 'ok_namn', ok: 'kanske' }]), /Ogiltig status/);
+  await assert.rejects(sync([{ u: 'ok_namn', miss: 'kanske' }]), /Ogiltig status/);
+  await assert.rejects(sync([{ u: 'ok_namn', miss: ['betala'] }]), /Ogiltig status/);
+  await assert.rejects(sync([{ u: 'ok_namn', miss: [], x2: 'ja' }]), /Ogiltig status/);
   await assert.rejects(sync('inte en lista'), /Ogiltig lista/);
   assert.equal(sql(t.db, 'select count(*) from giveaway_entries'), '4');
 });

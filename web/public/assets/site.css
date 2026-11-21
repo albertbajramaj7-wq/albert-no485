@@ -101,6 +101,11 @@ footer{overflow:hidden}
 .giveaway-mark{display:inline-block;flex:none;min-width:104px;text-align:center;padding:7px 10px;border:1px solid;border-radius:2px;font-size:10px;letter-spacing:1px;text-transform:uppercase;font-weight:700;line-height:1.4}
 .is-ok .giveaway-mark,.giveaway-mark.is-ok{background:#dfe9d8;border-color:#2f6b3f;color:#234f2f}
 .is-missing .giveaway-mark,.giveaway-mark.is-missing{background:#f3dcd5;border-color:#9c2f22;color:#7c2419}
+.is-double .giveaway-mark,.giveaway-mark.is-double{background:#ecc558;border-color:#9a7213;color:#3a2a04}
+.giveaway-double-title{margin-top:30px}
+.giveaway-who{display:flex;flex-direction:column;gap:5px;min-width:0}
+.giveaway-todo{font-size:12px;line-height:1.6;color:#7c2419}
+.giveaway-extra{color:#5b5f52}
 .giveaway-search label{display:block;font-size:10px;letter-spacing:1.8px;text-transform:uppercase;font-weight:700;margin-bottom:12px}
 .giveaway-search input{width:100%;min-height:56px;padding:14px 18px;border:1px solid var(--ink);border-radius:2px;background:#fff;font:inherit;font-size:17px;color:var(--ink)}
 .giveaway-search input:focus-visible{outline:3px solid var(--orange);outline-offset:3px}
@@ -110,7 +115,7 @@ footer{overflow:hidden}
 .giveaway-summary{font-size:12px;color:#5b5f52;margin:16px 0 0}
 .giveaway-status{font-size:13px;margin:18px 0 0;min-height:22px}
 .giveaway-list{list-style:none;margin:14px 0 0;padding:0;border-top:1px solid var(--line)}
-.giveaway-list li{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:11px 0;border-bottom:1px solid var(--line)}
+.giveaway-list li{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:12px 0;border-bottom:1px solid var(--line)}
 .giveaway-name{font-size:15px;word-break:break-all}
 .giveaway-note{font-size:11px;line-height:1.8;color:#5b5f52;margin:26px 0 0;max-width:520px}
 @media(max-width:860px){.giveaway-grid{grid-template-columns:1fr;gap:44px}.giveaway-intro .page-title{font-size:clamp(46px,13vw,72px)}}

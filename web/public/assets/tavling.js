@@ -4,25 +4,36 @@
   const $ = id => document.getElementById(id);
   const list = $('giveaway-list'), search = $('giveaway-search'), status = $('giveaway-status'), summary = $('giveaway-summary');
   if (!list || !search) return;
+  // Vad som är kvar att göra, i samma ordning som stegen på sidan.
+  const steps = [['story', 'Dela inlägget i din story och tagga oss'], ['tag', 'Tagga en vän i kommentarerna'], ['follow', 'Följ oss på Instagram']];
   let entries = [], filter = 'all';
   const clean = value => String(value || '').toLowerCase().replace(/[@\s]/g, '');
+  const el = (tag, cls, text) => { const node = document.createElement(tag); if (cls) node.className = cls; if (text !== undefined) node.textContent = text; return node; };
 
   function row(entry) {
-    const item = document.createElement('li');
-    item.className = entry.ok ? 'is-ok' : 'is-missing';
-    const name = document.createElement('span');
-    name.className = 'giveaway-name';
-    name.textContent = '@' + entry.u;
-    const mark = document.createElement('span');
-    mark.className = 'giveaway-mark';
-    mark.textContent = entry.ok ? 'Avklarat' : 'Ej avklarat';
-    item.append(name, mark);
+    const double = entry.ok && entry.x2;
+    const item = el('li', double ? 'is-double' : entry.ok ? 'is-ok' : 'is-missing');
+    const info = el('div', 'giveaway-who');
+    info.append(el('span', 'giveaway-name', '@' + entry.u));
+    if (!entry.ok) {
+      const left = steps.filter(([code]) => (entry.miss || []).includes(code)).map(([, label]) => label);
+      info.append(el('span', 'giveaway-todo', left.length ? 'Kvar att göra: ' + left.join('. ') + '.' : 'Något saknas. Skriv till oss på Instagram så hjälper vi dig.'));
+      if (entry.x2) info.append(el('span', 'giveaway-todo giveaway-extra', 'Kvittot för dubbel chans har vi fått.'));
+    }
+    item.append(info, el('span', 'giveaway-mark', double ? 'Dubbel chans' : entry.ok ? 'Avklarat' : 'Ej avklarat'));
     return item;
+  }
+
+  function matches(entry) {
+    if (filter === 'ok') return entry.ok;
+    if (filter === 'missing') return !entry.ok;
+    if (filter === 'double') return entry.ok && entry.x2;
+    return true;
   }
 
   function render() {
     const term = clean(search.value);
-    const shown = entries.filter(e => (filter === 'all' || (filter === 'ok') === e.ok) && (!term || e.u.includes(term)));
+    const shown = entries.filter(e => matches(e) && (!term || e.u.includes(term)));
     list.replaceChildren(...shown.map(row));
     if (!entries.length) return;
     if (!shown.length) status.textContent = term ? 'Vi hittar inget namn som matchar. Kontrollera stavningen, eller kommentera inlägget på Instagram för att komma med.' : 'Inga namn att visa.';
@@ -49,8 +60,7 @@
         status.textContent = 'Listan är inte publicerad just nu. Titta in igen lite senare.';
         return;
       }
-      const done = entries.filter(e => e.ok).length;
-      const parts = [entries.length + ' deltagare', done + ' avklarade'];
+      const parts = [entries.length + ' deltagare', entries.filter(e => e.ok).length + ' avklarade', entries.filter(e => e.ok && e.x2).length + ' med dubbel chans'];
       if (data.updatedAt) {
         const when = new Date(data.updatedAt);
         if (!Number.isNaN(when.getTime())) parts.push('uppdaterad ' + new Intl.DateTimeFormat('sv-SE', { day: 'numeric', month: 'long', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Stockholm' }).format(when));

@@ -3,6 +3,7 @@
   // Admin för tävlingslistan. Använder samma inloggning som /admin/ (kakorna gäller för /api).
   const $ = id => document.getElementById(id);
   const clean = value => String(value || '').toLowerCase().replace(/[@\s]/g, '');
+  const steps = { story: 'dela i story', tag: 'tagga en vän', follow: 'följa er' };
   let data = { published: false, entries: [] }, busy = false, confirmRemove = '';
 
   function note(message, error = false) {
@@ -33,7 +34,10 @@
     const name = document.createElement('div'); name.className = 'ga-name'; name.textContent = '@' + entry.u;
     const info = [];
     if (entry.hidden) info.push('Borttagen från listan');
-    else if (entry.manual) info.push('Ändrad för hand' + (entry.updatedBy ? ' av ' + entry.updatedBy : ''));
+    else {
+      if (!entry.ok && (entry.miss || []).length) info.push('Kvar: ' + entry.miss.map(code => steps[code] || code).join(', '));
+      if (entry.manual || entry.x2manual) info.push('Ändrad för hand' + (entry.updatedBy && entry.updatedBy !== 'Automatiskt' ? ' av ' + entry.updatedBy : ''));
+    }
     if (info.length) { const small = document.createElement('small'); small.textContent = info.join(' · '); name.append(small); }
     const actions = document.createElement('div'); actions.className = 'ga-actions';
     if (entry.hidden) {
@@ -41,10 +45,12 @@
     } else {
       const state = button(entry.ok ? 'Avklarat' : 'Ej avklarat', 'ga-state ' + (entry.ok ? 'ok' : 'missing'), () => change({ action: 'set', username: entry.u, approved: !entry.ok }));
       state.setAttribute('aria-label', '@' + entry.u + ': ' + (entry.ok ? 'Avklarat' : 'Ej avklarat') + '. Tryck för att byta.');
+      const double = button(entry.x2 ? 'Dubbel chans' : 'Enkel chans', 'ga-state ' + (entry.x2 ? 'double' : 'single'), () => change({ action: 'double', username: entry.u, double: !entry.x2 }));
+      double.setAttribute('aria-label', '@' + entry.u + ': ' + (entry.x2 ? 'Dubbel chans' : 'Enkel chans') + '. Tryck för att byta.');
       const remove = confirmRemove === entry.u
         ? button('Säkert? Ta bort', 'ga-small', () => change({ action: 'remove', username: entry.u }, '@' + entry.u + ' är borttagen från listan.'))
         : button('Ta bort', 'ga-small', () => { confirmRemove = entry.u; render(); });
-      actions.append(state, remove);
+      actions.append(state, double, remove);
     }
     actions.querySelectorAll('button').forEach(b => { b.disabled = busy; });
     item.append(name, actions);
@@ -63,10 +69,11 @@
       if (e.hidden) return false;
       if (filter === 'ok') return e.ok;
       if (filter === 'missing') return !e.ok;
-      if (filter === 'manual') return e.manual;
+      if (filter === 'double') return e.x2;
+      if (filter === 'manual') return e.manual || e.x2manual;
       return true;
     });
-    $('ga-count').textContent = visible.length + ' deltagare, varav ' + visible.filter(e => e.ok).length + ' avklarade och ' + visible.filter(e => !e.ok).length + ' ej avklarade. ' + shown.length + ' visas här.';
+    $('ga-count').textContent = visible.length + ' deltagare: ' + visible.filter(e => e.ok).length + ' avklarade, ' + visible.filter(e => !e.ok).length + ' ej avklarade och ' + visible.filter(e => e.x2).length + ' med dubbel chans. ' + shown.length + ' visas här.';
     $('ga-list').replaceChildren(...shown.map(row));
   }
 

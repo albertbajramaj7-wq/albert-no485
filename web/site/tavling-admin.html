@@ -28,10 +28,12 @@
     .ga-list li{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--line);flex-wrap:wrap}
     .ga-name{font-size:15px;word-break:break-all}
     .ga-name small{display:block;font-size:11px;color:#6a6d60}
-    .ga-actions{display:flex;gap:8px;align-items:center}
+    .ga-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .ga-state{min-height:40px;min-width:118px;padding:8px 14px;border-radius:2px;border:1px solid;font-size:12px;font-weight:700}
     .ga-state.ok{background:#dfe9d8;border-color:#2f6b3f;color:#234f2f}
     .ga-state.missing{background:#f3dcd5;border-color:#9c2f22;color:#7c2419}
+    .ga-state.double{background:#ecc558;border-color:#9a7213;color:#3a2a04}
+    .ga-state.single{background:none;border-color:var(--line);color:#5b5f52;font-weight:400}
     .ga-small{min-height:40px;padding:8px 12px;border:1px solid var(--line);border-radius:2px;background:none;font-size:12px}
     .ga-hidden-row .ga-name{color:#6a6d60;text-decoration:line-through}
     @media (max-width:600px){.ga-main h1{font-size:34px}.ga-list li{align-items:flex-start;flex-direction:column}}
@@ -42,7 +44,7 @@
   <div class="ga-top"><div class="container"><a href="/admin/">Tillbaka till admin</a><a href="/tavling/" target="_blank" rel="noopener">Öppna sidan på hemsidan</a></div></div>
   <main class="container ga-main" id="main">
     <h1>Tävling</h1>
-    <p>Här styr ni listan på hemsidan. Tryck på en status för att byta mellan Avklarat och Ej avklarat. Det ni ändrar för hand skrivs aldrig över av den automatiska uppdateringen.</p>
+    <p>Här styr ni listan på hemsidan. Tryck på en status för att byta mellan Avklarat och Ej avklarat, eller mellan enkel och dubbel chans. Listan fylls på automatiskt en gång om dagen, men det ni ändrar för hand skrivs aldrig över.</p>
     <div id="ga-notice" class="ga-notice" role="status" hidden></div>
     <div id="ga-content" hidden>
       <section class="ga-card">
@@ -61,7 +63,7 @@
         <h2>Deltagare</h2>
         <div class="ga-row">
           <label class="sr-only" for="ga-search">Sök namn</label><input type="search" id="ga-search" placeholder="Sök namn" autocomplete="off" autocapitalize="none" spellcheck="false">
-          <label class="sr-only" for="ga-filter">Visa</label><select id="ga-filter"><option value="all">Alla</option><option value="ok">Avklarat</option><option value="missing">Ej avklarat</option><option value="manual">Ändrade för hand</option><option value="hidden">Borttagna</option></select>
+          <label class="sr-only" for="ga-filter">Visa</label><select id="ga-filter"><option value="all">Alla</option><option value="ok">Avklarat</option><option value="missing">Ej avklarat</option><option value="double">Dubbel chans</option><option value="manual">Ändrade för hand</option><option value="hidden">Borttagna</option></select>
         </div>
         <p class="ga-count" id="ga-count"></p>
         <ul class="ga-list" id="ga-list"></ul>
