@@ -730,3 +730,14 @@
 .admin-app .transfer-form label{display:block;font-size:12px;color:var(--at-grey);margin-bottom:4px}
 .admin-app .transfer-form select,.admin-app .transfer-form input{width:100%;min-width:0}
 @media (max-width:700px){.admin-app .transfer-form{grid-template-columns:1fr 1fr}.admin-app .transfer-form button{grid-column:1/-1}}
+/* Buffert */
+.admin-app .buffer-rules{background:var(--at-bg-soft,#f4f4f2);border-left:3px solid var(--at-ink,#111);padding:12px 14px;margin:8px 0 14px;font-size:14px;line-height:1.5}
+.admin-app .buffer-rules p{margin:4px 0}
+.admin-app .buffer-figures{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:10px}
+.admin-app .buffer-figures>div{display:flex;flex-direction:column;gap:2px}
+.admin-app .buffer-figures span{font-size:12px;color:var(--at-grey)}
+.admin-app .buffer-figures small:empty{display:none}
+.admin-app .buffer-form{grid-template-columns:1fr 1.4fr 1fr auto}
+.admin-app .buffer-form .wide{grid-column:1/-2}
+.admin-app #bs-bufferRules{width:100%;font:inherit;padding:8px}
+@media (max-width:700px){.admin-app .buffer-figures{grid-template-columns:1fr 1fr}.admin-app .buffer-form .wide{grid-column:1/-1}}
