@@ -73,6 +73,16 @@ export function normalizeTransfers(list) {
   });
 }
 
+/** Koppling till ett verifikat i Fortnox: { series, number, year, date, text, total }. */
+export function normalizeVoucherRef(v) {
+  if (v === null || v === undefined) return null;
+  const series = String(v?.series || ''), number = Number(v?.number), year = Number(v?.year);
+  if (!/^[A-Za-z0-9]{1,5}$/.test(series) || !Number.isInteger(number) || number < 1 || !Number.isInteger(year) || year < 1) throw new BudgetError('Ogiltigt verifikat.');
+  const date = isoDate.test(String(v?.date || '')) ? v.date : null;
+  const total = v?.total === null || v?.total === undefined ? null : num(v.total, -100000000, 100000000, 'Ogiltigt belopp på verifikatet.');
+  return { series, number, year, date, text: text(v?.text, 100), total };
+}
+
 /** Uttag ur bufferten: [{ date, amount, to, note }], to = postnyckel eller 'free'. Datum måste ligga i veckan. */
 export function normalizeBufferUses(list, weekStart) {
   if (list === null || list === undefined) return [];
@@ -86,7 +96,10 @@ export function normalizeBufferUses(list, weekStart) {
     if (!/^[a-z0-9_]{1,40}$/.test(to) || to === 'buffer') throw new BudgetError('Ogiltigt mål för uttaget ur bufferten.');
     if (note.length < 3) throw new BudgetError('Beskriv vad pengarna ur bufferten användes till.');
     const amt = num(u?.amount, 0.01, 100000000, 'Beloppet ur bufferten måste vara större än 0.');
-    return { date, amount: Math.round(amt * 100) / 100, to, note };
+    const out = { date, amount: Math.round(amt * 100) / 100, to, note };
+    const voucher = normalizeVoucherRef(u?.voucher);
+    if (voucher) out.voucher = voucher;
+    return out;
   });
 }
 
@@ -261,7 +274,7 @@ export function computeBudget(settingsInput, weeksInput, received = {}) {
       if (amount <= 0) continue;
       pot -= amount; bufferUsed += amount;
       if (to) { to.out += amount; to.moved = (to.moved || 0) + amount; carry[to.key] = to.out; if (to.actual !== null) to.status = to.out >= 0 ? 'Täckt med buffert' : 'Över budget'; }
-      bufferUses.push({ date: u.date, to: u.to, note: u.note, amount: r2(amount), requested: u.amount });
+      bufferUses.push({ date: u.date, to: u.to, note: u.note, voucher: u.voucher || null, amount: r2(amount), requested: u.amount });
     }
     if (!example) bufferPot = pot;
     // Dricks är inte restaurangens pengar: den kommer in (oftast via kort) och ska betalas ut till personalen.

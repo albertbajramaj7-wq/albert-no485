@@ -136,3 +136,44 @@ test('om SIE-exporten nekas räknas saldon fram från verifikaten', async () => 
     assert.equal(s.body.overview.result.revenue, 446.48);
   } finally { t2.close(); }
 });
+
+test('verifikat kan listas och läsas för att kopplas till bufferten (bara GET mot Fortnox)', async () => {
+  const methods = [];
+  const fake = async (url, init = {}) => {
+    if (!url.includes('/oauth-v1/')) methods.push(init.method || 'GET');
+    if (url.includes('/vouchers?') && url.includes('fromdate')) return new Response(JSON.stringify({ ErrorInformation: { message: 'Ogiltig parameter' } }), { status: 400 });
+    if (url.includes('/vouchers?')) return new Response(JSON.stringify({ MetaInformation: { '@TotalPages': 1 }, Vouchers: [
+      { VoucherSeries: 'A', VoucherNumber: 7, Year: 4, TransactionDate: '2026-11-18', Description: 'Reparation ugnsdörr' },
+      { VoucherSeries: 'A', VoucherNumber: 3, Year: 4, TransactionDate: '2026-09-01', Description: 'Gammalt' }] }), { status: 200 });
+    if (url.includes('/vouchers/A/7')) return new Response(JSON.stringify({ Voucher: { VoucherSeries: 'A', VoucherNumber: 7, Year: 4, TransactionDate: '2026-11-18', Description: 'Reparation ugnsdörr', VoucherRows: [
+      { Account: 5500, Debit: 1000, Credit: 0 }, { Account: 2640, Debit: 250, Credit: 0 }, { Account: 1930, Debit: 0, Credit: 1250 }, { Account: 6991, Debit: 99, Credit: 0, Removed: true }] } }), { status: 200 });
+    return fakeFortnox(url, init);
+  };
+  const t3 = setup({ env: { FORTNOX_CLIENT_ID: 'klient', FORTNOX_CLIENT_SECRET: 'hemlis', SUPABASE_SERVICE_ROLE_KEY: 'test-nyckel-som-ar-lang-nog' }, fetcher: fake });
+  try {
+    t3.auth.addUser('albert@albertno485.com', 'hemligt-losen-1', 'Albert');
+    const tok = t3.auth.tokenFor('albert@albertno485.com');
+    await t3.call('GET', '/api/admin/day', undefined, { token: tok });
+    await t3.call('POST', '/api/admin/staff', { action: 'create', name: 'Marco', email: 'marco@example.se', role: 'staff', password: 'tillfalligt-123' }, { token: tok });
+    const start = await t3.call('POST', '/api/admin/fortnox', { action: 'connect' }, { token: tok });
+    await t3.app(new Request('https://albertno485.com/api/fortnox/callback?code=kod-123&state=' + new URL(start.body.url).searchParams.get('state')));
+    methods.length = 0;
+    const list = await t3.call('POST', '/api/admin/fortnox', { action: 'vouchers', from: '2026-11-16', to: '2026-12-20' }, { token: tok });
+    assert.equal(list.status, 200, JSON.stringify(list.body));
+    assert.deepEqual(list.body.vouchers.map(v => [v.series, v.number, v.date]), [['A', 7, '2026-11-18']]);
+    const one = await t3.call('POST', '/api/admin/fortnox', { action: 'voucher', series: 'A', number: 7, year: 4 }, { token: tok });
+    assert.equal(one.status, 200, JSON.stringify(one.body));
+    assert.equal(one.body.total, 1250);
+    assert.equal(one.body.rows.length, 3);
+    assert.ok(methods.every(m => m === 'GET'), 'bara läsning mot Fortnox');
+    assert.equal((await t3.call('POST', '/api/admin/fortnox', { action: 'vouchers', from: '2026-01-01', to: '2026-12-31' }, { token: tok })).status, 400);
+    assert.equal((await t3.call('POST', '/api/admin/fortnox', { action: 'voucher', series: 'A/../x', number: 7, year: 4 }, { token: tok })).status, 400);
+    const marco = t3.auth.tokenFor('marco@example.se');
+    assert.equal((await t3.call('POST', '/api/admin/fortnox', { action: 'vouchers', from: '2026-11-16', to: '2026-11-22' }, { token: marco })).status, 403);
+    // Uttag ur bufferten med kopplat verifikat sparas
+    const r = await t3.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-16', revenue: 30000, bufferUses: [{ date: '2026-11-18', to: 'free', amount: 500, note: 'Reparation ugnsdörr', voucher: { series: 'A', number: 7, year: 4, date: '2026-11-18', text: 'Reparation ugnsdörr', total: 1250 } }] } }, { token: tok });
+    assert.equal(r.status, 200, JSON.stringify(r.body));
+    const u = r.body.weeks.find(x => x.weekStart === '2026-11-16').bufferUses[0];
+    assert.deepEqual([u.voucher.series, u.voucher.number, u.voucher.total], ['A', 7, 1250]);
+  } finally { t3.close(); }
+});

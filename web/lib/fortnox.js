@@ -279,6 +279,51 @@ async function buildOverview({ fetcher, token, today, tryPaths, bankAccount }) {
 }
 
 /** Efter godkännande i Fortnox: byt kod mot nycklar och spara krypterat. */
+// ---------- Verifikat (endast läsning) ----------
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+async function yearFor(fetcher, token, date) {
+  let list = [];
+  for (const path of ['/financialyears?date=' + date, '/financialyears']) {
+    try { list = (await api(fetcher, token, path))?.FinancialYears || []; if (list.length) break; } catch (e) { if (e.fortnoxStatus !== 400 && e.fortnoxStatus !== 404) throw e; }
+  }
+  return list.find(y => y.FromDate <= date && y.ToDate >= date) || null;
+}
+const voucherHead = v => ({ series: String(v.VoucherSeries || ''), number: Number(v.VoucherNumber), year: Number(v.Year), date: String(v.TransactionDate || '').slice(0, 10), text: String(v.Description || '').slice(0, 100) });
+
+/** Verifikat mellan två datum (högst 40 dagar). Bara GET-anrop mot Fortnox. */
+export async function listVouchers({ rpc, env, fetcher, now = () => new Date(), from, to }) {
+  if (!DAY_RE.test(from || '') || !DAY_RE.test(to || '') || from > to || Date.parse(to) - Date.parse(from) > 40 * 864e5) throw new AppError(400, 'Välj en giltig period.');
+  const { token } = await accessToken({ rpc, env, fetcher, now });
+  const fy = await yearFor(fetcher, token, from);
+  if (!fy) return { vouchers: [], note: 'Inget räkenskapsår i Fortnox för perioden.' };
+  const out = [];
+  let filtered = true;
+  for (let page = 1; page <= 10; page++) {
+    let r;
+    const q = '/vouchers?financialyear=' + fy.Id + '&limit=500&page=' + page;
+    if (filtered) {
+      try { r = await api(fetcher, token, q + '&fromdate=' + from + '&todate=' + to); }
+      catch (e) { if (e.fortnoxStatus !== 400) throw e; filtered = false; }
+    }
+    if (!filtered) r = await api(fetcher, token, q);
+    for (const v of r?.Vouchers || []) { const h = voucherHead({ ...v, Year: v.Year || fy.Id }); if (h.date >= from && h.date <= to && h.series && Number.isInteger(h.number)) out.push(h); }
+    if (page >= Number(r?.MetaInformation?.['@TotalPages'] || 1)) break;
+  }
+  out.sort((a, b) => b.date.localeCompare(a.date) || a.series.localeCompare(b.series) || b.number - a.number);
+  return { vouchers: out.slice(0, 200) };
+}
+
+/** Ett verifikat med rader och belopp. Bara GET-anrop mot Fortnox. */
+export async function getVoucher({ rpc, env, fetcher, now = () => new Date(), series, number, year }) {
+  if (!/^[A-Za-z0-9]{1,5}$/.test(String(series || '')) || !Number.isInteger(number) || number < 1 || !Number.isInteger(year) || year < 1) throw new AppError(400, 'Ogiltigt verifikat.');
+  const { token } = await accessToken({ rpc, env, fetcher, now });
+  const v = (await api(fetcher, token, '/vouchers/' + encodeURIComponent(series) + '/' + number + '?financialyear=' + year))?.Voucher;
+  if (!v) throw new AppError(404, 'Verifikatet finns inte i Fortnox.');
+  const rows = (v.VoucherRows || []).filter(r => r.Removed !== true).map(r => ({ account: Number(r.Account), text: String(r.Description || r.TransactionInformation || '').slice(0, 80), debit: money(r.Debit) || 0, credit: money(r.Credit) || 0 }));
+  const total = Math.round(rows.reduce((n, r) => n + r.debit, 0) * 100) / 100;
+  return { ...voucherHead({ ...v, Year: v.Year || year }), total, rows };
+}
+
 export async function completeConnect({ rpc, env, fetcher, now = () => new Date(), code, state }) {
   const cfg = fortnoxConfig(env);
   if (!cfg.configured) throw new AppError(409, 'Fortnox-nycklarna saknas i Vercel.');

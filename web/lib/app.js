@@ -4,7 +4,7 @@ import { AppError } from './supabase.js';
 import { emailConfiguration, sendBookingEmail } from './email.js';
 import { BudgetError, computeBudget, normalizeSettings, normalizeWeek } from './budget.js';
 import { askAi, aiConfig } from './ai.js';
-import { authorizeUrl, completeConnect, fortnoxConfig, fortnoxSummary, randomState, syncFortnox } from './fortnox.js';
+import { authorizeUrl, completeConnect, fortnoxConfig, fortnoxSummary, getVoucher, listVouchers, randomState, syncFortnox } from './fortnox.js';
 import { bankConfig, bankStatus, forecast, matchFortnox, syncBank } from './bank.js';
 
 const AT = 'alb_at', RT = 'alb_rt';
@@ -263,6 +263,9 @@ export function createApp({ rpc, auth, env = {}, now = () => new Date(), fetcher
           return reply({ url: authorizeUrl(cfg, base, state, env), redirectUri: base });
         }
         if (input.action === 'sync') { await rpc('api_fortnox', { actor, action: 'status' }); return reply(await summary(await syncFortnox({ rpc, env, fetcher, now, by: s.actor.name }))); }
+        // Verifikat för att koppla uttag ur bufferten. Endast läsning mot Fortnox.
+        if (input.action === 'vouchers') { await rpc('api_fortnox', { actor, action: 'status' }); return reply(await listVouchers({ rpc, env, fetcher, now, from: input.from, to: input.to })); }
+        if (input.action === 'voucher') { await rpc('api_fortnox', { actor, action: 'status' }); return reply(await getVoucher({ rpc, env, fetcher, now, series: input.series, number: Number(input.number), year: Number(input.year) })); }
         if (input.action === 'save_map') return reply(await summary(await rpc('api_fortnox', { actor, action: 'save_map', supplierMap: input.supplierMap, bankAccount: input.bankAccount })));
         if (input.action === 'disconnect') return reply(await summary(await rpc('api_fortnox', { actor, action: 'disconnect' })));
         throw new AppError(400, 'Okänd åtgärd.');

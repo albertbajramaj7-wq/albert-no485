@@ -1140,7 +1140,38 @@
     return s;
   }
   // Buffert: sparad reserv. Uttag kräver datum och beskrivning, och täcker en post eller går till fritt saldo.
-  const bufferUseList = w => (w?.bufferUses || []).map(u => ({ date: u.date, to: u.to, note: u.note, amount: u.requested ?? u.amount }));
+  const bufferUseList = w => (w?.bufferUses || []).map(u => ({ date: u.date, to: u.to, note: u.note, amount: u.requested ?? u.amount, ...(u.voucher ? { voucher: u.voucher } : {}) }));
+  // Verifikat i Fortnox (endast läsning). Listan hämtas för veckan och 4 veckor framåt, eftersom bokföringen ofta görs senare.
+  const voucherCache = {};
+  const voucherLabel = v => 'Verifikat ' + v.series + ' ' + v.number + (v.date ? ' · ' + v.date : '') + (v.total !== null && v.total !== undefined ? ' · ' + krd(v.total) : '') + (v.text ? ' · ' + v.text : '');
+  function voucherPicker(onPick) {
+    const box = el('div', undefined, 'voucher-picker');
+    if (!budget.fortnox?.connected) { box.append(el('small', 'Koppla Fortnox under Ekonomi för att kunna välja verifikat.', 'field-help')); return box; }
+    const info = el('small', '', 'field-help');
+    const showList = list => {
+      box.replaceChildren();
+      if (!list.length) { box.append(el('small', 'Inga verifikat i Fortnox från ' + budWeek + ' och fyra veckor framåt.', 'field-help')); return; }
+      const sel = el('select'); sel.setAttribute('aria-label', 'Verifikat i Fortnox');
+      const none = el('option', 'Inget verifikat'); none.value = ''; sel.append(none);
+      list.forEach((v, i) => { const o = el('option', v.series + ' ' + v.number + ' · ' + v.date + (v.text ? ' · ' + v.text : '')); o.value = String(i); sel.append(o); });
+      sel.addEventListener('change', async () => {
+        if (sel.value === '') { info.textContent = ''; onPick(null); return; }
+        const h = list[Number(sel.value)];
+        const d = await adminCall('fortnox', { action: 'voucher', series: h.series, number: h.number, year: h.year });
+        if (!d) { sel.value = ''; return; }
+        info.textContent = 'Belopp ' + krd(d.total) + ' · konton ' + [...new Set(d.rows.map(r => r.account))].join(', ');
+        onPick({ series: d.series, number: d.number, year: d.year, date: d.date, text: d.text, total: d.total });
+      });
+      box.append(sel, info);
+    };
+    if (voucherCache[budWeek]) { showList(voucherCache[budWeek]); return box; }
+    const load = el('button', 'Hämta verifikat från Fortnox', 'secondary-button'); load.type = 'button';
+    load.addEventListener('click', async () => {
+      const r = await adminCall('fortnox', { action: 'vouchers', from: budWeek, to: addDays(budWeek, 34) });
+      if (r) { voucherCache[budWeek] = r.vouchers; showList(r.vouchers); }
+    });
+    box.append(load); return box;
+  }
   function renderBuffer(w) {
     const root = $('bud-buffer'); root.replaceChildren();
     root.hidden = !w?.computed || w.kind === 'example';
@@ -1157,6 +1188,18 @@
     (w.bufferUses || []).forEach((u, i) => {
       const row = el('div', undefined, 'transfer-row'), txt = el('span');
       txt.append(el('strong', dateText(u.date) + ': '), document.createTextNode(u.note + ' (till ' + name(u.to) + ')'));
+      if (u.voucher) txt.append(el('small', voucherLabel(u.voucher), 'voucher-tag'));
+      else {
+        const link = el('button', 'Koppla verifikat', 'text-button'); link.type = 'button';
+        link.addEventListener('click', () => {
+          let picked = null;
+          const save = el('button', 'Spara koppling', 'admin-primary'); save.type = 'button'; save.disabled = true;
+          const picker = voucherPicker(v => { picked = v; save.disabled = !v; });
+          save.addEventListener('click', () => { const list = bufferUseList(w); list[i] = { ...list[i], voucher: picked }; saveBudgetWeek({ bufferUses: list }, 'Verifikat ' + picked.series + ' ' + picked.number + ' är kopplat till uttaget.'); });
+          const box = el('div', undefined, 'voucher-link'); box.append(picker, save); link.replaceWith(box);
+        });
+        txt.append(link);
+      }
       row.append(txt, el('strong', krd(u.amount)));
       const undo = el('button', 'Ångra', 'text-button'); undo.type = 'button';
       undo.addEventListener('click', () => { const list = bufferUseList(w); list.splice(i, 1); saveBudgetWeek({ bufferUses: list }, 'Uttaget ur bufferten är ångrat.'); });
@@ -1175,6 +1218,13 @@
     const suggest = () => { const p = w.posts.find(x => x.key === to.value); amount.value = p && p.out < 0 ? fmtInput(Math.round(Math.min(-p.out, avail) * 100) / 100) : ''; };
     to.addEventListener('change', suggest); suggest();
     const desc = el('input'); desc.maxLength = 200; desc.placeholder = 'T.ex. reparation av ugnsdörr'; desc.setAttribute('aria-label', 'Vad pengarna användes till');
+    let voucher = null;
+    const picker = voucherPicker(v => {
+      voucher = v; if (!v) return;
+      if (v.total) { amount.value = fmtInput(Math.round(Math.min(v.total, avail) * 100) / 100); if (v.total > avail + 0.005) note('Verifikatet är på ' + krd(v.total) + ' men bufferten har bara ' + krd(avail) + '.'); }
+      if (!desc.value.trim() && v.text) desc.value = v.text;
+      if (v.date && v.date >= date.min && v.date <= date.max) date.value = v.date;
+    });
     const go = el('button', 'Ta ut ur bufferten', 'admin-primary'); go.type = 'button';
     go.addEventListener('click', () => {
       const n = parseNum(amount.value), note_ = desc.value.trim();
@@ -1182,10 +1232,10 @@
       if (!n || Number.isNaN(n) || n <= 0) { note('Ange ett belopp större än 0.'); return; }
       if (n > avail + 0.005) { note('Det finns bara ' + krd(avail) + ' i bufferten.'); return; }
       if (note_.length < 3) { note('Beskriv vad pengarna användes till.'); desc.focus(); return; }
-      saveBudgetWeek({ bufferUses: [...bufferUseList(w), { date: date.value, to: to.value, amount: n, note: note_ }] }, krd(n) + ' uttaget ur bufferten till ' + name(to.value) + '.');
+      saveBudgetWeek({ bufferUses: [...bufferUseList(w), { date: date.value, to: to.value, amount: n, note: note_, ...(voucher ? { voucher } : {}) }] }, krd(n) + ' uttaget ur bufferten till ' + name(to.value) + '.');
     });
     const lab = (t, c, cls) => { const d = el('div'); if (cls) d.className = cls; d.append(el('label', t), c); return d; };
-    form.append(lab('Datum', date), lab('Till', to), lab('Belopp (kr)', amount), lab('Vad användes pengarna till?', desc, 'wide'), go);
+    form.append(lab('Verifikat i Fortnox (valfritt)', picker, 'full'), lab('Datum', date), lab('Till', to), lab('Belopp (kr)', amount), lab('Vad användes pengarna till?', desc, 'wide'), go);
     root.append(form);
   }
 
