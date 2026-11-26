@@ -35,6 +35,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     { name: 'Företagskort / internationella', share: 0.05, rate: 0, fee: 0 },
   ],
   cardFeeVat: 0,
+  bufferRules: 'Bufferten är en reserv för oväntade och nödvändiga kostnader som inte ryms i veckans budget. Den får användas till: reparation eller service av ugn, maskiner och lokal; akuta inköp när en post gått över budget och inte kan täckas genom omfördelning; oförutsedda avgifter och räkningar. Den får inte användas till privata uttag, löpande kostnader som har en egen post, eller inköp som kan vänta till nästa vecka. Skriv alltid datum och vad pengarna gick till.',
   fixed: [
     { key: 'rent', name: 'Hyra, el och vatten', amount: null, basis: 'inkl', vat: 0.25 },
     { key: 'wood', name: 'Ved', amount: null, basis: 'inkl', vat: 0.25 },
@@ -72,6 +73,23 @@ export function normalizeTransfers(list) {
   });
 }
 
+/** Uttag ur bufferten: [{ date, amount, to, note }], to = postnyckel eller 'free'. Datum måste ligga i veckan. */
+export function normalizeBufferUses(list, weekStart) {
+  if (list === null || list === undefined) return [];
+  if (!Array.isArray(list) || list.length > 30) throw new BudgetError('Ogiltiga uttag ur bufferten.');
+  const start = Date.parse(weekStart + 'T00:00:00Z');
+  return list.map(u => {
+    const date = String(u?.date || ''), to = String(u?.to || 'free'), note = text(u?.note, 200);
+    const day = Date.parse(date + 'T00:00:00Z');
+    if (!isoDate.test(date) || Number.isNaN(day)) throw new BudgetError('Ange ett giltigt datum för uttaget ur bufferten.');
+    if (day < start || day > start + 6 * 864e5) throw new BudgetError('Datumet för uttaget ska ligga i den valda veckan.');
+    if (!/^[a-z0-9_]{1,40}$/.test(to) || to === 'buffer') throw new BudgetError('Ogiltigt mål för uttaget ur bufferten.');
+    if (note.length < 3) throw new BudgetError('Beskriv vad pengarna ur bufferten användes till.');
+    const amt = num(u?.amount, 0.01, 100000000, 'Beloppet ur bufferten måste vara större än 0.');
+    return { date, amount: Math.round(amt * 100) / 100, to, note };
+  });
+}
+
 /** Tvättar och kontrollerar inställningar. Saknade fält får standardvärden. */
 export function normalizeSettings(input) {
   const s = input && typeof input === 'object' ? input : {};
@@ -85,6 +103,7 @@ export function normalizeSettings(input) {
     startBalance: num(s.startBalance, -100000000, 100000000, 'Ogiltigt startsaldo.', { fallback: 0 }),
     pct: {}, purchaseVat: {},
     cardFeeVat: pct(s.cardFeeVat, 'moms på kortavgift', d.cardFeeVat),
+    bufferRules: typeof s.bufferRules === 'string' && s.bufferRules.trim() ? s.bufferRules.trim().slice(0, 1500) : d.bufferRules,
   };
   for (const k of ['goods', 'fuel', 'staff', 'other', 'buffer']) out.pct[k] = pct(s.pct?.[k], k, d.pct[k]);
   for (const k of ['goods', 'fuel', 'other']) out.purchaseVat[k] = pct(s.purchaseVat?.[k], 'inköpsmoms', d.purchaseVat[k]);
@@ -131,6 +150,7 @@ export function normalizeWeek(w, settings) {
     cardCount: w.cardCount === null || w.cardCount === undefined || w.cardCount === '' ? null : Math.round(num(w.cardCount, 0, 1000000, 'Ogiltigt antal kortköp.')),
     tips: amount(w.tips, 'dricks'),
     transfers: normalizeTransfers(w.transfers),
+    bufferUses: normalizeBufferUses(w.bufferUses, w.weekStart),
     note: text(w.note, 300),
     actuals,
   };
@@ -177,10 +197,11 @@ export function computeBudget(settingsInput, weeksInput, received = {}) {
 
   const carry = {};
   let balance = s.startBalance;
+  let bufferPot = 0; // sparad buffert: veckornas avsättningar minus uttag
   const weeks = [...weeksInput].sort((a, b) => a.weekStart.localeCompare(b.weekStart)).map(w => {
     const base = { ...w, input: { revenue: w.revenue ?? null, salesVat: w.salesVat ?? null, cardAmount: w.cardAmount ?? null, cardCount: w.cardCount ?? null, tips: w.tips ?? null }, week: isoWeek(w.weekStart), received: received[w.weekStart] ?? null, balanceIn: r2(balance) };
     if (w.revenue === null || w.revenue === undefined) {
-      return { ...base, computed: false, status: 'Fyll i omsättning', balanceOut: r2(balance), free: r2(balance - positivePots(carry)) };
+      return { ...base, computed: false, status: 'Fyll i omsättning', balanceOut: r2(balance), free: r2(balance - positivePots(carry)), bufferIn: r2(bufferPot), bufferOut: r2(bufferPot), bufferUses: [] };
     }
     let revEx, salesVat;
     if (s.reportBasis === 'inkl') {
@@ -228,13 +249,28 @@ export function computeBudget(settingsInput, weeksInput, received = {}) {
       if (!example) carry[p.key] = p.out;
     }
     const buffer = revEx * s.pct.buffer;
+    // Uttag ur bufferten: pengar ur den sparade bufferten täcker en post som gått över, eller går till fritt saldo.
+    // Man kan inte ta ut mer än som finns sparat (inklusive veckans avsättning).
+    const bufferIn = bufferPot;
+    let pot = bufferIn + buffer, bufferUsed = 0;
+    const bufferUses = [];
+    for (const u of example ? [] : w.bufferUses || []) {
+      const to = u.to === 'free' ? null : posts.find(p => p.key === u.to);
+      if (u.to !== 'free' && !to) continue;
+      const amount = Math.min(u.amount, Math.max(0, pot));
+      if (amount <= 0) continue;
+      pot -= amount; bufferUsed += amount;
+      if (to) { to.out += amount; to.moved = (to.moved || 0) + amount; carry[to.key] = to.out; if (to.actual !== null) to.status = to.out >= 0 ? 'Täckt med buffert' : 'Över budget'; }
+      bufferUses.push({ date: u.date, to: u.to, note: u.note, amount: r2(amount), requested: u.amount });
+    }
+    if (!example) bufferPot = pot;
     // Dricks är inte restaurangens pengar: den kommer in (oftast via kort) och ska betalas ut till personalen.
     // Den sätts undan och påverkar varken budgeten eller saldot.
     const tips = w.tips ?? 0;
     const reserve = posts.reduce((n, p) => n + p.budget, 0) + buffer + salesVat;
     const left = salesInkl - reserve;
     const plusMinus = salesInkl - used - buffer - salesVat;
-    const balanceOut = example ? balance : balance + plusMinus;
+    const balanceOut = example ? balance : balance + plusMinus + bufferUsed;
     if (!example) balance = balanceOut;
     const goodsActual = w.actuals?.goods;
     const round = p => ({ ...p, ex: r2(p.ex), vat: r2(p.vat), budget: r2(p.budget), in: r2(p.in), available: r2(p.available), out: r2(p.out), moved: p.moved ? r2(p.moved) : 0 });
@@ -243,7 +279,8 @@ export function computeBudget(settingsInput, weeksInput, received = {}) {
       status: example ? 'Exempel, förs inte vidare' : posts.some(p => p.actual === null) ? 'Utfall saknas för vissa poster' : 'Klar',
       revenueEx: r2(revEx), salesVat: r2(salesVat), salesInkl: r2(salesInkl),
       perOpenDay: r2(revEx / s.openDays), cardAmount: r2(cardAmount), cardCount,
-      posts: posts.map(round), transfers, buffer: r2(buffer), vatReserve: r2(salesVat), tips: r2(tips),
+      posts: posts.map(round), transfers, buffer: r2(buffer),
+      bufferIn: r2(bufferIn), bufferUsed: r2(bufferUsed), bufferOut: r2(example ? bufferIn : pot), bufferUses, vatReserve: r2(salesVat), tips: r2(tips),
       purchaseVat: r2(posts.reduce((n, p) => n + (p.key === 'staff' ? 0 : p.vat), 0)),
       reserve: r2(reserve), left: r2(left), plusMinus: r2(plusMinus),
       goodsPct: goodsActual === undefined || !revEx ? null : r2(goodsActual / (1 + s.purchaseVat.goods) / revEx * 100),

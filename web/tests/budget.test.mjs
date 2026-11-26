@@ -1,7 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { setup } from './helpers.mjs';
-import { computeBudget, isoWeek, normalizeTransfers } from '../lib/budget.js';
+import { computeBudget, isoWeek, normalizeTransfers, normalizeBufferUses } from '../lib/budget.js';
 
 // Påhittade siffror – inga riktiga belopp i koden.
 const settings = {
@@ -131,4 +131,41 @@ test('omfördelningar sparas med veckan', async () => {
   const w = r.body.weeks.find(x => x.weekStart === '2026-11-09');
   assert.deepEqual(w.transfers.map(x => [x.from, x.to, x.amount]), [['fuel', 'free', 200]]);
   assert.equal((await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-09', revenue: 30000, transfers: [{ from: 'fuel', to: 'free', amount: -5 }] } }, { token: owner })).status, 400);
+});
+
+test('bufferten sparas vecka för vecka och kan tas ut med datum och beskrivning', () => {
+  const p = (w, k) => w.posts.find(x => x.key === k);
+  const w1 = { weekStart: '2026-11-02', revenue: 30000, actuals: {} };
+  const w2 = uses => ({ weekStart: '2026-11-09', revenue: 30000, actuals: { goods: 9500 }, bufferUses: uses });
+  const base = computeBudget(settings, [w1, w2([])]).weeks;
+  assert.equal(base[0].bufferIn, 0);
+  assert.equal(base[0].bufferOut, base[0].buffer);
+  assert.equal(base[1].bufferIn, base[0].buffer);
+  const over = -p(base[1], 'goods').out;
+  assert.ok(over > 0);
+  // Täck varuinköp med bufferten: posten hamnar på 0, saldot ökar, bufferten minskar
+  const used = computeBudget(settings, [w1, w2([{ date: '2026-11-11', to: 'goods', amount: over, note: 'Extra mjöl' }])]).weeks[1];
+  assert.equal(p(used, 'goods').out, 0);
+  assert.equal(p(used, 'goods').status, 'Täckt med buffert');
+  assert.equal(used.bufferUsed, over);
+  assert.equal(used.bufferOut, Math.round((base[1].bufferOut - over) * 100) / 100);
+  assert.equal(Math.round((used.balanceOut - base[1].balanceOut) * 100) / 100, over);
+  assert.equal(used.bufferUses[0].note, 'Extra mjöl');
+  // Mer än som finns i bufferten går inte
+  const tooMuch = computeBudget(settings, [w1, w2([{ date: '2026-11-11', to: 'free', amount: 9999999, note: 'Test' }])]).weeks[1];
+  assert.equal(tooMuch.bufferOut, 0);
+  assert.equal(tooMuch.bufferUsed, base[1].bufferOut);
+  // Datum och beskrivning krävs
+  assert.throws(() => normalizeBufferUses([{ date: '2026-11-20', to: 'free', amount: 5, note: 'Fel vecka' }], '2026-11-09'));
+  assert.throws(() => normalizeBufferUses([{ date: '2026-11-10', to: 'free', amount: 5, note: '' }], '2026-11-09'));
+  assert.throws(() => normalizeBufferUses([{ to: 'free', amount: 5, note: 'Utan datum' }], '2026-11-09'));
+  assert.ok(computeBudget(settings, []).settings.bufferRules.length > 20);
+});
+
+test('uttag ur bufferten sparas med veckan', async () => {
+  const r = await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-16', revenue: 30000, bufferUses: [{ date: '2026-11-18', to: 'free', amount: 100, note: 'Service av ugn' }] } }, { token: owner });
+  assert.equal(r.status, 200, JSON.stringify(r.body));
+  const w = r.body.weeks.find(x => x.weekStart === '2026-11-16');
+  assert.deepEqual(w.bufferUses.map(x => [x.date, x.to, x.amount, x.note]), [['2026-11-18', 'free', 100, 'Service av ugn']]);
+  assert.equal((await t.call('POST', '/api/admin/budget', { action: 'save_week', week: { weekStart: '2026-11-16', revenue: 30000, bufferUses: [{ date: '2026-11-18', to: 'free', amount: 100, note: '' }] } }, { token: owner })).status, 400);
 });
