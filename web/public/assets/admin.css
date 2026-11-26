@@ -741,3 +741,8 @@
 .admin-app .buffer-form .wide{grid-column:1/-2}
 .admin-app #bs-bufferRules{width:100%;font:inherit;padding:8px}
 @media (max-width:700px){.admin-app .buffer-figures{grid-template-columns:1fr 1fr}.admin-app .buffer-form .wide{grid-column:1/-1}}
+.admin-app .buffer-form .full{grid-column:1/-1}
+.admin-app .voucher-picker{display:flex;flex-direction:column;gap:4px}
+.admin-app .voucher-tag{display:block;color:var(--at-grey);font-size:12px;margin-top:2px}
+.admin-app .voucher-link{display:flex;flex-wrap:wrap;gap:8px;align-items:flex-start;margin-top:6px}
+.admin-app .transfer-row span .text-button{margin-left:8px}
